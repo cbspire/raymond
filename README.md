@@ -105,7 +105,8 @@ You should receive your app's HTTP response. `curl --resolve` can diagnose the p
 
 ```sh
 sudo /opt/raymond-bootstrap/raymond stop
-sudo /opt/raymond-bootstrap/raymond restart  # use start if it is stopped on macOS
+sudo /opt/raymond-bootstrap/raymond start
+sudo /opt/raymond-bootstrap/raymond restart
 sudo /opt/raymond-bootstrap/raymond uninstall
 ```
 
