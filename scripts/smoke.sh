@@ -14,7 +14,7 @@ CGO_ENABLED=1 go test -c -tags osintegration -o "$root/bin/raymond-acceptance" "
 # native installer tools, proving that the product never invokes a Go runtime.
 native_bin=$(mktemp -d)
 trap 'rm -rf "$native_bin"' EXIT
-for tool in bash sh uname tar awk mktemp mkdir chmod mv rm cp shasum sha256sum perl; do
+for tool in bash sh uname tar gzip awk mktemp mkdir chmod mv rm cp shasum sha256sum perl; do
   if tool_path=$(command -v "$tool"); then ln -s "$tool_path" "$native_bin/$tool"; fi
 done
 sudo env PATH="$native_bin" \

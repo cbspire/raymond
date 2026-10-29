@@ -4,7 +4,7 @@ set -euo pipefail
 repo=cbspire/raymond
 fail() { printf 'Raymond installer: %s\n' "$*" >&2; exit 1; }
 [ "$#" -eq 0 ] || fail 'Use RAYMOND_VERSION and RAYMOND_INSTALL_DIR environment variables; no arguments are accepted.'
-for tool in uname tar awk mktemp mkdir chmod mv rm cp; do
+for tool in uname tar gzip awk mktemp mkdir chmod mv rm cp; do
   command -v "$tool" >/dev/null 2>&1 || fail "Required command not found: $tool"
 done
 case "$(uname -s)" in
