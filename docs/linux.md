@@ -4,16 +4,7 @@ v0.1's integration targets distributions with **both systemd-resolved and system
 
 A dedicated networkd dummy interface `raymond0` carries only route-only DNS domains, with `DNSDefaultRoute=no`. Native systemd-networkd configures resolved per-link; DNS points at `127.0.0.43:53`. Unrelated link DNS and systemd drop-ins remain untouched. An existing interface or configuration resource is a conflict. Installation waits for the dedicated interface and verifies the exact DNS server, route-only domains and disabled default routing through resolvectl; unexpected state retains the recovery journal and fails closed. This integration must pass the privileged runner smoke test before a release; it has not been verified in the development container.
 
-Review the binary and example YAML. Explicit administrator commands:
-
-```sh
-sudo install -o root -m 755 bin/raymond /usr/local/bin/raymond
-sudo /usr/local/bin/raymond install --config examples/raymond.yaml
-sudo /usr/local/bin/raymond start
-/usr/local/bin/raymond status
-sudo /usr/local/bin/raymond stop
-sudo /usr/local/bin/raymond uninstall
-```
+Use the explicit [installation walkthrough](installation.md) and [README bootstrap commands](../README.md#install-and-enable-os-integration). The reviewed bootstrap binary is copied to `/opt/raymond-bootstrap/raymond`; the managed systemd binary is `/usr/local/libexec/raymond/raymond`. Both paths must have trusted root-owned ancestors.
 
 Install refuses existing unrelated files. An identical reinstall is a no-op; changed config or binary requires stop, uninstall and reinstall from the edited source YAML. Retain your source configuration. The installed config is `/etc/raymond/config.yaml`, root-owned, mode 0644; it must not contain secrets. The systemd service runs with DynamicUser and only CAP_NET_BIND_SERVICE. It has no network-administration capability.
 

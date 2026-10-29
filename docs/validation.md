@@ -13,8 +13,14 @@ This is an implementation candidate, **not a published or certified v0.1.0 relea
 - Ownership tests: preexisting resource refusal, atomic no-overwrite publication, modified-file cleanup refusal, journal retention, symlink refusal and lifecycle lock exclusion.
 - govulncheck v1.9.0: no vulnerabilities found with current dependencies.
 - actionlint v1.7.7: workflows validated (shellcheck/pyflakes integrations not installed).
-- GoReleaser v2.16.0: configuration validates and local snapshot archives/checksums build for darwin/amd64, darwin/arm64, linux/amd64 and linux/arm64. No tag, remote push or release publication was performed.
+- GoReleaser v2.16.0: configuration validates and local snapshot archives/checksums build for darwin/amd64, darwin/arm64, linux/amd64 and linux/arm64. No release tag or release publication was performed; the feature branch is pushed for PR review.
 - Standalone native executable: 50 concurrent local HTTP requests preserve Host and URL, followed by successful SIGTERM shutdown. A diagnostic run took 1.154 seconds with 11,024 KiB RSS after the requests. The elapsed time reflects the Python load driver/backend; RSS measures only the Raymond process. These diagnostics do not define a performance SLA. The Go integration run under the race detector took about 70 ms for 50 DNS+HTTP requests; the workloads differ and are not comparable benchmarks.
+
+## PR checks and follow-up
+
+PR #1's CI jobs passed on both ubuntu-24.04 and macos-15. The Security workflow exposed that the original `go 1.26.0` directive selected an unpatched standard library on GitHub, despite local validation using Go 1.26.10. The minimum is now Go 1.26.10, and the updated GitHub vulnerability job passes. CodeQL also needed `actions: read` for workflow metadata; that job and its reusable release caller now grant only that additional read permission. With this fixed, GitHub reports that code scanning is not enabled for this private repository (HTTP 403). A maintainer must enable the available code-scanning feature in repository Settings → Code security before CodeQL result upload can pass. The failing check remains visible. Updated check results must always be assessed on the latest PR head.
+
+Installer follow-up tests cover four platform/architecture asset selections, immutable latest-tag resolution, missing/ambiguous checksums, failed downloads, non-regular archives, failed binary startup, directory/symlink destinations and preservation of an existing binary. These are offline fixtures, not native OS installation acceptance. macOS's helper is installed under `/Library/PrivilegedHelperTools` rather than a Homebrew-managed path.
 
 ## Required external acceptance (not run)
 
