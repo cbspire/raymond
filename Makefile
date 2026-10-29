@@ -1,9 +1,11 @@
 GO ?= go
+GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0
 .PHONY: fmt lint test test-race build integration snapshot check
 fmt:
 	gofmt -w cmd internal test
 lint:
 	$(GO) vet ./...
+	$(GOLANGCI_LINT) run
 test:
 	$(GO) test ./...
 test-race:

@@ -268,7 +268,8 @@ func Uninstall() error {
 	if e = Verify(s); e != nil {
 		return e
 	}
-	if runtime.GOOS == "linux" {
+	switch runtime.GOOS {
+	case "linux":
 		if native("systemctl", "is-active", "--quiet", "raymond.service") == nil {
 			if e = native("systemctl", "stop", "raymond.service"); e != nil {
 				return e
@@ -277,7 +278,7 @@ func Uninstall() error {
 		if e = native("systemctl", "disable", "raymond.service"); e != nil {
 			return e
 		}
-	} else if runtime.GOOS == "darwin" {
+	case "darwin":
 		if native("launchctl", "print", "system/dev.raymond") == nil {
 			if e = native("launchctl", "bootout", "system/dev.raymond"); e != nil {
 				return e

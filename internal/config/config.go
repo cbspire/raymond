@@ -42,7 +42,7 @@ func Normalize(s string) (string, error) {
 			return "", fmt.Errorf("invalid DNS label")
 		}
 		for _, c := range l {
-			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+			if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
 				return "", fmt.Errorf("hostname must use ASCII DNS labels")
 			}
 		}

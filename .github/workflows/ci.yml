@@ -1,0 +1,39 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  checks:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - run: test -z "$(gofmt -l cmd internal test)"
+      - run: go mod tidy && git diff --exit-code -- go.mod go.sum
+      - run: go vet ./...
+      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9
+        with:
+          version: v2.12.0
+      - run: go test ./...
+      - run: go test -race ./...
+      - run: make integration build
+      - run: bash scripts/test-installer.sh
+      - name: Static build matrix
+        shell: bash
+        run: |
+          for os in darwin linux; do
+            for arch in amd64 arm64; do
+              CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -o bin/raymond_${os}_${arch} ./cmd/raymond
+              test -s bin/raymond_${os}_${arch}
+            done
+          done

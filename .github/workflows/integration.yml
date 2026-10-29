@@ -1,0 +1,27 @@
+name: Privileged OS integration
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  smoke:
+    environment: platform-validation
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - run: make build
+      - name: Reviewed disposable-runner OS lifecycle
+        env:
+          RAYMOND_PRIVILEGED_SMOKE: '1'
+        run: scripts/smoke.sh

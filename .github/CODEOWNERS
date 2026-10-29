@@ -1,0 +1,4 @@
+/internal/platform/ @cbspire
+/internal/install/ @cbspire
+/.github/workflows/ @cbspire
+/scripts/install.sh @cbspire
