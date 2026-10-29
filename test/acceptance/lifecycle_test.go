@@ -392,6 +392,34 @@ func TestInstalledLifecycle(t *testing.T) {
 			}
 		}()
 	}
+
+	if runtime.GOOS == "linux" {
+		const fixture = "ray-dns-test"
+		if _, err := net.InterfaceByName(fixture); err == nil {
+			t.Fatal("DNS collision fixture already exists")
+		}
+		must(t, nativePath("ip"), "link", "add", "name", fixture, "type", "dummy")
+		func() {
+			defer func() {
+				out, err := command(nativePath("ip"), "link", "delete", fixture)
+				if err != nil {
+					t.Errorf("DNS fixture cleanup: %v %s", err, out)
+				}
+			}()
+			must(t, nativePath("ip"), "address", "add", "192.0.2.44/32", "dev", fixture)
+			must(t, nativePath("ip"), "link", "set", fixture, "up")
+			must(t, nativePath("resolvectl"), "dns", fixture, "127.0.0.1")
+			must(t, nativePath("resolvectl"), "domain", fixture, "~test")
+			out, err := command(binary, "install", "--config", configPath)
+			if err == nil || !strings.Contains(string(out), "overlaps existing scope") {
+				t.Fatalf("another DNS scope was not refused: %v %s", err, out)
+			}
+			out = must(t, nativePath("resolvectl"), "domain", fixture)
+			if !strings.Contains(string(out), "~test") {
+				t.Fatal("another DNS scope was changed")
+			}
+		}()
+	}
 	a := &apps{connections: map[string]bool{}}
 	localhost := a.serve(t, 80)
 	a.serve(t, 9001)

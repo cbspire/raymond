@@ -175,7 +175,7 @@ func Install(path string) error {
 	}
 	var created []string
 	if runtime.GOOS == "linux" {
-		if e = PlatformCheck(); e != nil {
+		if e = PlatformCheck(c.DNS.Zones...); e != nil {
 			return e
 		}
 		if _, e = net.InterfaceByName("raymond0"); e == nil {
@@ -318,7 +318,7 @@ func Control(action string) error {
 			if e != nil {
 				return e
 			}
-			if e = PlatformCheck(); e != nil {
+			if e = PlatformCheck(c.DNS.Zones...); e != nil {
 				return e
 			}
 			if _, e = net.InterfaceByName("raymond0"); e != nil {
@@ -483,7 +483,7 @@ func lock(path string) (func(), error) {
 }
 
 // PlatformCheck checks existing resolver compatibility without changing it.
-func PlatformCheck() error {
+func PlatformCheck(zones ...string) error {
 	if runtime.GOOS == "linux" {
 		if e := linux.Check(native); e != nil {
 			return e
@@ -491,6 +491,17 @@ func PlatformCheck() error {
 		p, e := filepath.EvalSymlinks("/etc/resolv.conf")
 		if e != nil || p != "/run/systemd/resolve/stub-resolv.conf" {
 			return fmt.Errorf("linux integration requires the existing systemd-resolved stub resolv.conf symlink; refusing to rewire the resolver")
+		}
+		if len(zones) > 0 {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			out, e := exec.CommandContext(ctx, "/usr/bin/resolvectl", "domain").Output()
+			if e != nil {
+				return fmt.Errorf("cannot inspect existing DNS scope ownership: %w", e)
+			}
+			if e = linux.CheckZones(zones, string(out)); e != nil {
+				return e
+			}
 		}
 	}
 	return nil
