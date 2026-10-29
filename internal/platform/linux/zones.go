@@ -14,7 +14,7 @@ func CheckZones(zones []string, output string) error {
 		if len(parts) != 2 {
 			continue
 		}
-		if strings.Contains(parts[0], "(raymond0)") {
+		if strings.HasSuffix(strings.TrimSpace(parts[0]), "(raymond0)") {
 			continue
 		}
 		for _, field := range strings.Fields(parts[1]) {

@@ -4,7 +4,7 @@ Local wildcard DNS and HTTP reverse proxying in one native Go binary.
 
 Map an installation once and use as many nested site hostnames as your local app needs. Raymond preserves the original HTTP Host, path, query, cookies, redirects and streaming traffic, including WebSocket upgrades.
 
-**Current status:** v0.1 is an implementation candidate. No release is published yet. Ordinary Linux and macOS CI checks have passed; privileged OS installation, native DNS integration and cleanup still require real-runner acceptance. See [validation status](docs/validation.md).
+**Current status:** v0.1 is a tested release candidate. Real macOS 15/arm64 and Ubuntu 24.04/amd64 jobs pass packaged installation, native DNS, crash/restart recovery, cleanup and offline-runtime acceptance. Candidate archives are downloadable from the PR's **Privileged OS integration** workflow artifacts. No stable GitHub release is published yet. See [validation evidence](docs/validation.md).
 
 ## What it does
 
@@ -13,6 +13,8 @@ Map an installation once and use as many nested site hostnames as your local app
 - HTTP at `127.0.0.42:80` and DNS at `127.0.0.43:53`, leaving `127.0.0.1:80` available.
 - One loopback IP/port target per installation; no registration of individual WordPress multisite blogs.
 - Explicit service installation and cleanup for macOS and supported systemd Linux systems.
+
+**One native executable, no application runtime dependencies.** Raymond includes its DNS server and HTTP proxy. It needs no Go installation, Docker, Python, Node, nginx or dnsmasq to run. Linux binaries are statically linked; macOS uses only system libraries. YAML is configuration data. Installed service/split-DNS integration uses the OS's native management tools and services, described below.
 
 **HTTP only.** HTTPS, certificates and trust-store changes are deferred to v0.2. There is no caching, compression, rewriting, dashboard or remote-control API. `.local` is rejected because it conflicts with mDNS/Bonjour. Local processes can reach the proxy; loopback is not an authentication boundary.
 
@@ -32,7 +34,7 @@ make build
 bin/raymond version
 ```
 
-The result is `bin/raymond`. macOS and Linux builds target amd64 and arm64. A download-and-install path will be available after a release is published; see [release binary installation](#install-a-released-binary).
+The result is `bin/raymond`. macOS and Linux builds target amd64 and arm64. To evaluate without installing Go, download a `raymond-candidate-*` artifact from the PR's **Privileged OS integration** workflow, unzip it, and use the included `scripts/install.sh` with its `dist/` archives as described in [candidate installation](docs/installation.md#install-a-candidate-without-go). The artifact includes the example YAML and installation guide. Native acceptance covers macOS arm64 and Linux amd64; the other two targets are cross-built.
 
 ## Configure a local app
 
@@ -79,7 +81,7 @@ Review the platform requirements before running administrator commands:
 
 NetworkManager-only, non-systemd and container setups are unsupported for automatic Linux integration. Raymond refuses conflicts and does not rewrite `resolv.conf` or overwrite unrelated resolver files. An existing `0.0.0.0:80` listener conflicts; stop or reconfigure it yourself. OS integration requires the default addresses and ports shown above.
 
-The following explicit commands copy your reviewed binary into a root-owned bootstrap directory, install Raymond-owned resources, check binds, and start the service. They change OS DNS/service configuration; **use a disposable system for candidate evaluation**.
+The following explicit commands copy your reviewed binary into a root-owned bootstrap directory, install Raymond-owned resources, check binds, and start the service. They change OS DNS/service configuration; **review the changes before running them on your workstation**.
 
 ```sh
 sudo install -d -o root -m 755 /var/lib/raymond-bootstrap
@@ -132,7 +134,7 @@ raymond version
 
 The script detects macOS/Linux and amd64/arm64, downloads the archive and SHA-256 manifest from the same immutable release tag, verifies the checksum and archive contents, checks that the binary runs, then atomically installs it to `~/.local/bin/raymond`. It never invokes sudo or changes DNS/services. Checksums provide integrity, not independent signing/provenance.
 
-Omit `RAYMOND_VERSION` to select the latest stable release. Override the user binary directory with an absolute `RAYMOND_INSTALL_DIR`, for example `RAYMOND_INSTALL_DIR="$HOME/bin"`. Directory and symlink destinations are refused. To enable OS integration, review the downloaded binary, substitute `"$HOME/.local/bin/raymond"` for `bin/raymond` in the bootstrap-copy command above, and follow the same explicit setup steps.
+Pinned candidate versions such as `v0.1.0-rc.g<commit>` are also accepted. Use `RAYMOND_ARCHIVE_DIR=/absolute/path/to/dist` to install already-downloaded candidate archives without curl or network access; a pinned version is required in that mode. Omit `RAYMOND_VERSION` in online mode to select the latest stable release. Override the user binary directory with an absolute `RAYMOND_INSTALL_DIR`, for example `RAYMOND_INSTALL_DIR="$HOME/bin"`. Directory and symlink destinations are refused. To enable OS integration, review the downloaded binary, substitute `"$HOME/.local/bin/raymond"` for `bin/raymond` in the bootstrap-copy command above, and follow the same explicit setup steps.
 
 ## Develop and validate
 
@@ -145,7 +147,7 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
 `make check` runs formatting checks, vet, pinned static analysis, unit/race tests and a static build. First-time tooling/dependency installation needs Internet access. Raymond itself only contacts configured local backends at runtime. `make snapshot` needs GoReleaser v2.16.0 and builds all four native archives without publishing.
 
-Privileged smoke tests are separate: only run `RAYMOND_PRIVILEGED_SMOKE=1 scripts/smoke.sh` on a reviewed disposable supported runner. Release publication is gated on those tests, security checks and configured approval rules.
+Privileged acceptance tests run separately on disposable macOS/Linux PR runners. For a manual run, prepare GoReleaser snapshot archives in `dist/`, then run `RAYMOND_PRIVILEGED_SMOKE=1 scripts/smoke.sh` only on a reviewed disposable supported runner. The compiled test helpers are CI tools, not part of the distributed product. Release publication is gated on those tests, security checks and configured approval rules.
 
 The vulnerability scan runs on every PR. CodeQL runs automatically for public repositories; for a private repository, enable code scanning in Settings → Code security and set the repository Actions variable `RAYMOND_CODEQL_ENABLED=true`. Otherwise CodeQL is explicitly reported as skipped. See [security configuration](docs/security.md).
 

@@ -1,36 +1,49 @@
-# v0.1 implementation validation
+# v0.1 acceptance evidence
 
-This is an implementation candidate, **not a published or certified v0.1.0 release**. M0–M5 code and M6 local acceptance tests are present as focused commits on stacked feature branches. Required real-OS acceptance remains open. Ordinary macOS integration fixtures validate production configuration and then use high ports on its preexisting localhost address; actual dedicated-address aliases are tested only by privileged smoke jobs.
+Raymond is a tested release candidate. Stable `v0.1.0` publication remains a separate review/tagging action; no stable release has been published by this task. All product artifacts contain one native executable plus README/LICENSE. The DNS server and HTTP proxy are built into that executable.
 
-## Verified locally (Linux amd64, Go 1.26.10)
+## Native M4–M6 acceptance
 
-- Exact `make check`: format, go vet, pinned golangci-lint v2.12.0 (zero issues), unit tests, race tests and CGO-disabled binary build.
-- `make integration`: foreground DNS over TCP/UDP and HTTP, plus 10 installations / 50 concurrent hostnames across two zones with backend identity and WordPress Host/path/query assertions.
-- `go test -tags port80 -race -v ./test/integration`: localhost:80 remains responsive while Raymond serves dedicated loopback:80; wildcard :80 conflict detected without terminating the other listener.
-- HTTP tests: large POST preservation, raw paths/query strings, original Host, cookies, redirects, forwarding-header spoofing, streaming, real WebSocket handshake/framed messages, raw upgrades, 404/502 and backend connection reuse.
-- Configuration/router fuzzing: 210,211 normalization executions and 134,325 suffix-boundary executions in short fuzz runs; no failures. Regression tests cover Unicode case folding, canonical ports, duplicate routes, YAML typos and unsafe targets.
-- Installer offline fixtures: successful/repeated install, checksum corruption and unsafe archives rejected without replacing the existing binary. Bash syntax checks pass.
-- Ownership tests: preexisting resource refusal, atomic no-overwrite publication, modified-file cleanup refusal, journal retention, symlink refusal and lifecycle lock exclusion.
-- govulncheck v1.9.0: no vulnerabilities found with current dependencies.
-- actionlint v1.7.7: workflows validated (shellcheck/pyflakes integrations not installed).
-- GoReleaser v2.16.0: configuration validates and local snapshot archives/checksums build for darwin/amd64, darwin/arm64, linux/amd64 and linux/arm64. No release tag or release publication was performed; the feature branch is pushed for PR review.
-- Standalone native executable: 50 concurrent local HTTP requests preserve Host and URL, followed by successful SIGTERM shutdown. A diagnostic run took 1.154 seconds with 11,024 KiB RSS after the requests. The elapsed time reflects the Python load driver/backend; RSS measures only the Raymond process. These diagnostics do not define a performance SLA. The Go integration run under the race detector took about 70 ms for 50 DNS+HTTP requests; the workloads differ and are not comparable benchmarks.
+[Passing native workflow run 40972916814](https://github.com/cbspire/raymond/actions/runs/40972916814) establishes the following on actual disposable OS runners:
 
-## PR checks and follow-up
+| Capability | macOS 15 / arm64 | Ubuntu 24.04 / amd64 |
+| --- | --- | --- |
+| Real GoReleaser archive installed as an ordinary user | Passed | Passed |
+| Go absent from runtime PATH; product built CGO_ENABLED=0 | Passed | Passed |
+| No non-system runtime libraries / static Linux ELF | Passed | Passed |
+| Native OS DNS and 10 installations / 50 concurrent hostnames | Passed | Passed |
+| Exact backend, original Host, path, query, cookie and redirect behavior | Passed | Passed |
+| localhost:80 coexistence and wildcard-listener diagnostic | Passed | Passed |
+| Kernel inspection of exactly the dedicated loopback listeners | Passed | Passed |
+| Actual daemon SIGKILL followed by OS service-manager recovery | Passed | Passed |
+| Controlled restart and start after deleting volatile alias/link state | Passed | Passed |
+| Existing-file conflicts, modified-file refusal and unrelated-file preservation | Passed | Passed |
+| Owned files, aliases/interface and journal removed on uninstall | Passed | Passed |
+| External networking kernel-restricted during DNS/HTTP runtime | Seatbelt policy passed | Isolated network namespace passed |
 
-PR #1's CI jobs passed on both ubuntu-24.04 and macos-15. The Security workflow exposed that the original `go 1.26.0` directive selected an unpatched standard library on GitHub, despite local validation using Go 1.26.10. The minimum is now Go 1.26.10, and the updated GitHub vulnerability job passes. CodeQL also needed `actions: read` for workflow metadata; that job and its reusable release caller now grant only that additional read permission. With this fixed, GitHub reports that code scanning is not enabled for this private repository (HTTP 403).
+The native helper uses the platform's libc resolver, not a direct DNS query substituted for OS integration. If a disposable Ubuntu image begins with a foreign `resolv.conf`, the test first verifies that Raymond refuses to change it, then prepares the supported stub symlink as an explicit test fixture and restores the original file/symlink, mode and ownership at cleanup. The production installer never rewires `resolv.conf`. It is a compiled CI-only test binary; it is not shipped or needed by Raymond. The runtime PATH is an explicit whitelist of installer-native tools with no Go, Python, Node or external DNS/proxy program. Linux additionally verifies the daemon is non-root with only CAP_NET_BIND_SERVICE.
 
-As required by the implementation plan's "CodeQL ... if enabled for the repo" condition, CodeQL now runs automatically on public repositories and requires explicit opt-in on private ones. Enable the feature in Settings → Code security, then set the repository Actions variable `RAYMOND_CODEQL_ENABLED=true`. Without this opt-in, CodeQL is **skipped**, not passed, and the Security job's summary and notice explain why. The govulncheck job remains unconditional. If CodeQL is opted in but unavailable or fails analysis/upload, its job fails normally. Updated check results must always be assessed on the latest PR head.
+The cold-start test reconstructs volatile state after stopping the service and removing owned aliases/interface. It does not claim an actual machine power-cycle. WordPress-compatible protocol behavior is exercised through representative HTTP backends; WordPress and its database are not bundled with Raymond.
 
-Installer follow-up tests cover four platform/architecture asset selections, immutable latest-tag resolution, missing/ambiguous checksums, failed downloads, non-regular archives, failed binary startup, directory/symlink destinations and preservation of an existing binary. These are offline fixtures, not native OS installation acceptance. macOS's helper is installed under `/Library/PrivilegedHelperTools` rather than a Homebrew-managed path.
+## Diagnostic measurements
 
-## Required external acceptance (not run)
+The referenced run measured 50 native-OS-resolved concurrent requests at about 23.7 ms on macOS and 39.8 ms on Linux. Daemon RSS afterward was 26,480 KiB and 11,844 KiB respectively. These are one-run diagnostics, not a benchmark contract or throughput SLA.
 
-- Full install → native OS resolution → HTTP → stop → uninstall on real macOS and supported systemd Linux runners. This container has neither a systemd PID 1 nor resolvectl; no macOS host is attached. No resolver or service changes were made here.
-- macOS alias creation/removal, launchd reboot recovery and root-daemon behavior.
-- Linux networkd dummy-interface creation, exact resolved per-link scope and cleanup, resolved stub compatibility, and DynamicUser service hardening on real distributions.
-- Crash/reboot lifecycle recovery and network-disconnected packet-level verification.
-- Privileged smoke workload and unrelated-resource restoration: scripts and CI gates exist but have not run on real OS runners. Unsupported runner prerequisites must fail; they must not be converted into skips.
-- CodeQL, protected branch checks, environment approvals, dependency/secret scanning settings, artifact provenance and download of a publicly released archive. Repository settings require maintainer configuration; files do not enable them automatically. Dependency-review Action availability was not confirmed, so no unverified workflow dependency was added.
+## Other verification
 
-Release is blocked until these required platform checks pass. Trigger reviewed disposable-runner integration through GitHub after configuring the `platform-validation` environment. Configure the `release` environment approval and protected tags before publishing. A local build or cross-compilation does not satisfy real-OS acceptance.
+- `make check`: format, vet, golangci-lint v2.12.0, unit tests, race detector and static binary build.
+- `make integration`: ordinary high-port DNS over TCP/UDP and HTTP tests. macOS fixtures use existing localhost sockets; privileged acceptance separately validates the real dedicated aliases.
+- HTTP tests cover large bodies, raw URL preservation, forwarding-header spoofing, streaming, real WebSocket frames, connection reuse and 404/502 behavior.
+- Short fuzz runs completed 210,211 normalization and 134,325 suffix-boundary executions with no failures.
+- Installer fixtures cover OS/architecture selection, pinned/latest versions, failed downloads, missing/ambiguous/corrupted checksums, non-regular archive members, failed executable startup, directory/symlink destinations, and offline archive mode.
+- Ownership tests cover atomic publication, no-overwrite behavior, safe permissions, symlink refusal, changed-file refusal and lifecycle lock exclusion.
+- `govulncheck` passes using the patched Go 1.26.10 minimum. CodeQL is conditional on repository support: private repositories opt in using `RAYMOND_CODEQL_ENABLED=true` after enabling code scanning. Otherwise its job is explicitly skipped and the summary explains the missing coverage.
+- Pinned actionlint and shell syntax checks pass. Four GoReleaser archives and SHA-256 manifests are built for darwin/linux × amd64/arm64. Native acceptance covers darwin/arm64 and linux/amd64; the other two targets are cross-built.
+
+## Distribution and remaining release actions
+
+The **Privileged OS integration** workflow uploads candidate archives, checksums, metadata, installer and configuration/docs. Its immutable artifact names include the tested Git SHA; evidence logs are uploaded per OS. Artifacts expire after 14 days. Candidate versions are `0.1.0-rc.g<commit>`, while final tagged releases use their actual version.
+
+The owner still needs to review/merge the PR and authorize the release tag/publication. Repository branch/tag protections, environment approval rules, dependency/secret scanning and optional artifact signing/attestation are settings or release-policy actions, not automatically enabled by source files. The release workflow requires CI, security and native OS acceptance before its publication job. GitHub's `release` environment should be configured with the owner's approval policy before publishing.
+
+Linux integration currently requires already-active systemd-networkd/systemd-resolved and the resolved stub symlink. Other Linux resolver arrangements fail closed. macOS's installed daemon runs as root for privileged ports and alias reconstruction; privilege isolation remains future hardening. No HTTPS, certificates or trust-store changes are included in v0.1.

@@ -6,4 +6,6 @@ Use the explicit [installation walkthrough](installation.md) and [README bootstr
 
 Installation does not start the launchd daemon immediately. `sudo /var/lib/raymond-bootstrap/raymond start` bootstraps it; RunAtLoad enables reboot startup. Stop boots it out and restart kickstarts it. Uninstall removes only resources whose hashes match the root-owned journal and aliases created by Raymond. The system log `/var/log/raymond.log` is retained.
 
-No real macOS runner is available in the development environment. Alias lifecycle, OS split DNS, reboot recovery and coexistence with localhost:80 require the privileged CI smoke test before release. Cross-compilation is insufficient evidence.
+Native acceptance passes on macOS 15/arm64: installed archives without Go on PATH, OS DNS resolution, localhost:80 coexistence, launchd crash/restart recovery, alias reconstruction after deleting owned aliases while stopped, refusal of modified files, and safe uninstall. A Seatbelt sandbox blocks non-localhost outbound connections during the offline runtime test. Kernel socket inspection verifies exactly the dedicated TCP/UDP listeners. Full machine power-cycle and other macOS versions/architectures have not been exercised.
+
+Darwin may allow a wildcard socket and a specific-address socket to coexist under SO_REUSEADDR. `doctor` therefore uses macOS's built-in `/usr/sbin/lsof` as well as bind probes to detect conflicting wildcard listeners. It does not terminate them.

@@ -332,6 +332,7 @@ func TestInstalledLifecycle(t *testing.T) {
 		t.Fatal(e)
 	}
 	write(t, configPath, b, 0644)
+	prepareResolver(t, binary, configPath)
 	initialAliases := aliases(t)
 	sentinel := "/etc/resolver/unrelated.raymond.invalid"
 	if runtime.GOOS == "linux" {
