@@ -1,0 +1,13 @@
+version: 1
+dns:
+  zones: [test, internal]
+  listen: 127.0.0.43:53
+proxy:
+  listen: 127.0.0.42:80
+installations:
+  - domain: install01.web.test
+    target: 127.0.0.1:9001
+  - domain: install02.web.test
+    target: 127.0.0.1:9002
+  - domain: demo.internal
+    target: 127.0.0.2:8080

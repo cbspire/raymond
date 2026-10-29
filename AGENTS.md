@@ -1,0 +1,7 @@
+# Development rules
+
+Raymond v0.1 supports offline wildcard DNS and HTTP proxying only. HTTPS belongs to v0.2. Preserve Host, URLs, bodies, cookies and redirects. Bind only dedicated loopback addresses; never take localhost:80 or :443. Reject untrusted forwarding headers and non-loopback backends. Use idiomatic Go, explicit errors, immutable validated config and bounded network operations. Keep dependencies small.
+
+Work incrementally on feature branches with Conventional Commits. Add behavioral tests before implementing routing, DNS and proxy changes. Run `make check`, `make integration` and the static build matrix before completion. Run fuzz seeds under ordinary tests. Never execute privileged installation changes without explicit review of the concrete operations. Test platform lifecycle on real supported runners; cross-compilation is not OS validation. Never claim a release is ready if required platform checks remain unrun. Do not push or publish releases without authorization.
+
+Completion checklist: tests and race checks pass; no HTTPS or unrelated proxy features; no external runtime dependencies beyond native OS management tools; docs explain privileges and limitations; uninstall touches only owned resources; report unrun platform tests.
