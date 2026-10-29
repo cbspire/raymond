@@ -4,14 +4,14 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 if [ "${RAYMOND_PRIVILEGED_SMOKE:-}" != 1 ]; then echo 'Set RAYMOND_PRIVILEGED_SMOKE=1 only on a reviewed disposable runner' >&2; exit 1; fi
 sudo -n true
-sudo install -d -o root -m 755 /opt/raymond-smoke
-sudo install -o root -m 755 "$root/bin/raymond" /opt/raymond-smoke/raymond
+sudo install -d -o root -m 755 /var/lib/raymond-smoke
+sudo install -o root -m 755 "$root/bin/raymond" /var/lib/raymond-smoke/raymond
 cleanup() {
-  sudo /opt/raymond-smoke/raymond uninstall || true
+  sudo /var/lib/raymond-smoke/raymond uninstall || true
   if [ -n "${backend:-}" ]; then sudo kill "$backend" 2>/dev/null || true; fi
   if [ -n "${tmp:-}" ]; then rm -rf "$tmp"; fi
-  sudo rm -f /opt/raymond-smoke/raymond
-  sudo rmdir /opt/raymond-smoke 2>/dev/null || true
+  sudo rm -f /var/lib/raymond-smoke/raymond
+  sudo rmdir /var/lib/raymond-smoke 2>/dev/null || true
 }
 trap cleanup EXIT
 # The helper binds localhost:80 before Raymond and runs two local app backends.
@@ -37,9 +37,9 @@ with open(sys.argv[1],'w') as f:
   f.write('  - domain: install%d.web.%s\n    target: 127.0.0.1:%d\n'%(i,zone,9001+i%2))
 PY
 sleep 1
-sudo /opt/raymond-smoke/raymond install --config "$tmp/config.yaml"
-sudo /opt/raymond-smoke/raymond install --config "$tmp/config.yaml"
-sudo /opt/raymond-smoke/raymond start
+sudo /var/lib/raymond-smoke/raymond install --config "$tmp/config.yaml"
+sudo /var/lib/raymond-smoke/raymond install --config "$tmp/config.yaml"
+sudo /var/lib/raymond-smoke/raymond start
 python3 - <<'PY'
 import socket,urllib.request,time,concurrent.futures
 opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -59,8 +59,8 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=10) as p:list(p.map(check
 print('50 OS-resolved concurrent HTTP requests passed in %.3fs'%(time.monotonic()-start))
 with opener.open('http://127.0.0.1/',timeout=2) as r:assert r.read()==b'localhost unchanged'
 PY
-sudo /opt/raymond-smoke/raymond stop
-sudo /opt/raymond-smoke/raymond uninstall
+sudo /var/lib/raymond-smoke/raymond stop
+sudo /var/lib/raymond-smoke/raymond uninstall
 # Ensure cleanup really removed owned split DNS/service resources, not just a PID.
 case "$(uname -s)" in
  Darwin) test ! -e /etc/resolver/test; test ! -e /etc/resolver/internal; test ! -e /Library/LaunchDaemons/dev.raymond.plist;;

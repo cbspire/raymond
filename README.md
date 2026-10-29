@@ -82,12 +82,12 @@ NetworkManager-only, non-systemd and container setups are unsupported for automa
 The following explicit commands copy your reviewed binary into a root-owned bootstrap directory, install Raymond-owned resources, check binds, and start the service. They change OS DNS/service configuration; **use a disposable system for candidate evaluation**.
 
 ```sh
-sudo install -d -o root -m 755 /opt/raymond-bootstrap
-sudo install -o root -m 755 bin/raymond /opt/raymond-bootstrap/raymond
-sudo /opt/raymond-bootstrap/raymond install --config "$PWD/raymond.yaml"
-sudo /opt/raymond-bootstrap/raymond doctor
-sudo /opt/raymond-bootstrap/raymond start
-/opt/raymond-bootstrap/raymond status
+sudo install -d -o root -m 755 /var/lib/raymond-bootstrap
+sudo install -o root -m 755 bin/raymond /var/lib/raymond-bootstrap/raymond
+sudo /var/lib/raymond-bootstrap/raymond install --config "$PWD/raymond.yaml"
+sudo /var/lib/raymond-bootstrap/raymond doctor
+sudo /var/lib/raymond-bootstrap/raymond start
+/var/lib/raymond-bootstrap/raymond status
 ```
 
 `install` and `start` are separate actions. The service uses a root-owned copy of the binary and `/etc/raymond/config.yaml`; it does not execute from your checkout or `~/.local/bin`. macOS stores that service binary under `/Library/PrivilegedHelperTools`, outside Homebrew-managed directories. The bootstrap path and its ancestors must also be root-owned and not group/world writable; do not change ownership of unrelated directories to bypass a refusal.
@@ -104,10 +104,10 @@ You should receive your app's HTTP response. `curl --resolve` can diagnose the p
 ## Stop, update and uninstall
 
 ```sh
-sudo /opt/raymond-bootstrap/raymond stop
-sudo /opt/raymond-bootstrap/raymond start
-sudo /opt/raymond-bootstrap/raymond restart
-sudo /opt/raymond-bootstrap/raymond uninstall
+sudo /var/lib/raymond-bootstrap/raymond stop
+sudo /var/lib/raymond-bootstrap/raymond start
+sudo /var/lib/raymond-bootstrap/raymond restart
+sudo /var/lib/raymond-bootstrap/raymond uninstall
 ```
 
 These are separate lifecycle examples. Uninstall also stops the service if needed. It removes only recorded owned resources and refuses operator-modified installed files. Your source config, downloaded binary and bootstrap copy remain; empty directories/logs may also remain.

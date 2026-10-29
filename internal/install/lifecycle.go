@@ -28,7 +28,7 @@ func binaryPath() string {
 	if runtime.GOOS == "darwin" {
 		return darwin.BinaryPath
 	}
-	return "/usr/local/libexec/raymond/raymond"
+	return linux.BinaryPath
 }
 
 func root() error {

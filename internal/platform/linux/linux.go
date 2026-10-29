@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const BinaryPath = "/usr/libexec/raymond/raymond"
+
 const Marker = "# Raymond owned; do not edit\n"
 
 func Files(c config.Config) map[string][]byte {
@@ -24,7 +26,7 @@ Requires=systemd-resolved.service systemd-networkd.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/libexec/raymond/raymond serve --config /etc/raymond/config.yaml
+ExecStart=/usr/libexec/raymond/raymond serve --config /etc/raymond/config.yaml
 Restart=on-failure
 RestartSec=2
 DynamicUser=yes

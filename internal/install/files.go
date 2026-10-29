@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	darwin "github.com/cbspire/raymond/internal/platform/darwin"
+	linux "github.com/cbspire/raymond/internal/platform/linux"
 )
 
 type Record struct {
@@ -183,7 +184,7 @@ func Remove(statePath string, s State) error {
 }
 
 func resourceMode(path string) os.FileMode {
-	if path == darwin.BinaryPath || path == "/usr/local/libexec/raymond/raymond" {
+	if path == darwin.BinaryPath || path == linux.BinaryPath {
 		return 0755
 	}
 	return 0644

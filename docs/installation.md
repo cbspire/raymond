@@ -12,11 +12,11 @@ Raymond has two installation steps: obtaining a binary as an ordinary user, then
 
 ## Binary locations and permissions
 
-The README uses `/opt/raymond-bootstrap/raymond` as the reviewed root-owned entry point for administrator commands. A user-owned downloaded binary must first be copied there with explicit `sudo install`; running the OS installer directly from a writable checkout or `~/.local/bin` is rejected. Root service files never point into your home directory.
+The README uses `/var/lib/raymond-bootstrap/raymond` as the reviewed root-owned entry point for administrator commands. A user-owned downloaded binary must first be copied there with explicit `sudo install`; running the OS installer directly from a writable checkout or `~/.local/bin` is rejected. Root service files never point into your home directory.
 
 | Resource | macOS | Linux |
 | --- | --- | --- |
-| Managed service binary (0755) | `/Library/PrivilegedHelperTools/dev.raymond` | `/usr/local/libexec/raymond/raymond` |
+| Managed service binary (0755) | `/Library/PrivilegedHelperTools/dev.raymond` | `/usr/libexec/raymond/raymond` |
 | Service config (0644) | `/etc/raymond/config.yaml` | `/etc/raymond/config.yaml` |
 | Ownership journal (0600) | `/var/lib/raymond/state.json` | `/var/lib/raymond/state.json` |
 | Service definition | `/Library/LaunchDaemons/dev.raymond.plist` | `/etc/systemd/system/raymond.service` |
@@ -88,7 +88,7 @@ On macOS high ports still require the dedicated loopback aliases. Do not assume 
 An identical install is idempotent. Changing installed config or replacing its managed binary directly invalidates the ownership hashes and causes uninstall to refuse cleanup.
 
 1. Keep the existing bootstrap binary and installed resources intact.
-2. Run `sudo /opt/raymond-bootstrap/raymond uninstall`. It stops the service if needed.
+2. Run `sudo /var/lib/raymond-bootstrap/raymond uninstall`. It stops the service if needed.
 3. Edit and validate your separate source YAML, or explicitly replace the root-owned bootstrap copy with the reviewed new binary.
 4. Run install, doctor and start again using the source config.
 
@@ -97,7 +97,7 @@ This requires downtime; there is no hot reload. On macOS use `start` after `stop
 ## Uninstall and interrupted setup
 
 ```sh
-sudo /opt/raymond-bootstrap/raymond uninstall
+sudo /var/lib/raymond-bootstrap/raymond uninstall
 ```
 
 Only resources that match the recorded ownership hashes are removed. Preexisting resolver files and unrelated systemd drop-ins are preserved. Only recorded Raymond-created macOS aliases are removed. Your source config, user-downloaded binary and bootstrap executable remain, as can empty directories, a lock file and logs. Remove those user-created copies separately if no longer needed; they are not service resources.
