@@ -18,7 +18,13 @@ jobs:
           go-version-file: go.mod
           check-latest: true
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: Report optional CodeQL availability
+        if: github.event.repository.private && vars.RAYMOND_CODEQL_ENABLED != 'true'
+        run: |
+          echo '::notice::CodeQL is skipped for this private repository. Enable code scanning and set RAYMOND_CODEQL_ENABLED=true to opt in.'
+          printf '%s\n' '### CodeQL: skipped' 'This private repository has not opted in to CodeQL. Enable code scanning in repository settings, then set the repository Actions variable RAYMOND_CODEQL_ENABLED=true. The vulnerability scan above remains required.' >> "$GITHUB_STEP_SUMMARY"
   codeql:
+    if: github.event.repository.private == false || vars.RAYMOND_CODEQL_ENABLED == 'true'
     runs-on: ubuntu-24.04
     permissions:
       actions: read

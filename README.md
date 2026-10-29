@@ -147,4 +147,6 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
 Privileged smoke tests are separate: only run `RAYMOND_PRIVILEGED_SMOKE=1 scripts/smoke.sh` on a reviewed disposable supported runner. Release publication is gated on those tests, security checks and configured approval rules.
 
+The vulnerability scan runs on every PR. CodeQL runs automatically for public repositories; for a private repository, enable code scanning in Settings → Code security and set the repository Actions variable `RAYMOND_CODEQL_ENABLED=true`. Otherwise CodeQL is explicitly reported as skipped. See [security configuration](docs/security.md).
+
 Further reading: [installation](docs/installation.md), [troubleshooting](docs/troubleshooting.md), [architecture](docs/architecture.md), [security](docs/security.md), [contributing](CONTRIBUTING.md), and [license](LICENSE).
