@@ -23,7 +23,13 @@ import (
 
 const ConfigPath = "/etc/raymond/config.yaml"
 const statePath = "/var/lib/raymond/state.json"
-const binaryPath = "/usr/local/libexec/raymond/raymond"
+
+func binaryPath() string {
+	if runtime.GOOS == "darwin" {
+		return darwin.BinaryPath
+	}
+	return "/usr/local/libexec/raymond/raymond"
+}
 
 func root() error {
 	if os.Geteuid() != 0 {
@@ -131,7 +137,7 @@ func Install(path string) error {
 	if e != nil {
 		return e
 	}
-	files[binaryPath] = b
+	files[binaryPath()] = b
 	for p := range files {
 		if e = trustedParent(p); e != nil {
 			return e

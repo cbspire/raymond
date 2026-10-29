@@ -1,41 +1,75 @@
 #!/usr/bin/env bash
+# Install only the user-owned binary. OS integration is a separate explicit step.
 set -euo pipefail
 repo=cbspire/raymond
-case "$(uname -s)" in Darwin) os=darwin;; Linux) os=linux;; *) echo 'Unsupported operating system' >&2; exit 1;; esac
-case "$(uname -m)" in arm64|aarch64) arch=arm64;; x86_64|amd64) arch=amd64;; *) echo 'Unsupported architecture' >&2; exit 1;; esac
+fail() { printf 'Raymond installer: %s\n' "$*" >&2; exit 1; }
+[ "$#" -eq 0 ] || fail 'Use RAYMOND_VERSION and RAYMOND_INSTALL_DIR environment variables; no arguments are accepted.'
+for tool in uname curl tar awk mktemp mkdir chmod mv rm; do
+  command -v "$tool" >/dev/null 2>&1 || fail "Required command not found: $tool"
+done
+case "$(uname -s)" in
+  Darwin) os=darwin; checksum_tool=shasum;;
+  Linux) os=linux; checksum_tool=sha256sum;;
+  *) fail 'Unsupported operating system; expected macOS or Linux.';;
+esac
+case "$(uname -m)" in
+  arm64|aarch64) arch=arm64;;
+  x86_64|amd64) arch=amd64;;
+  *) fail 'Unsupported architecture; expected amd64 or arm64.';;
+esac
+command -v "$checksum_tool" >/dev/null 2>&1 || fail "Required command not found: $checksum_tool"
+dir=${RAYMOND_INSTALL_DIR:-${HOME:?HOME required}/.local/bin}
+case "$dir" in /*) ;; *) fail 'Install directory must be absolute.';; esac
+case "$dir" in /|*$'\n'*) fail 'Unsafe install directory.';; esac
+# Canonicalize the directory, then refuse directory/symlink destinations instead
+# of letting mv put a downloaded executable inside an unrelated directory.
+mkdir -p "$dir"
+dir=$(cd "$dir" && pwd -P)
+[ "$dir" != / ] || fail 'Refusing to install into the filesystem root.'
+[ ! -d "$dir/raymond" ] && [ ! -L "$dir/raymond" ] || fail 'Destination raymond is a directory or symbolic link; resolve it explicitly first.'
 version=${RAYMOND_VERSION:-}
 if [ -z "$version" ]; then
-  url=$(curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest")
+  if ! url=$(curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest"); then
+    fail 'Could not resolve the latest stable release. Check connectivity and GitHub Releases, or build from source.'
+  fi
   version=${url##*/}
 fi
-if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo 'Expected an immutable stable version such as v0.1.0' >&2; exit 1; fi
+[[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'Expected an immutable stable version such as v0.1.0.'
 archive="raymond_${version#v}_${os}_${arch}.tar.gz"
 base="https://github.com/$repo/releases/download/$version"
 tmp=$(mktemp -d)
 stage=''
-trap 'rm -rf "$tmp"; if [ -n "$stage" ]; then rm -f "$stage"; fi' EXIT
+cleanup() {
+  rm -rf "$tmp"
+  if [ -n "$stage" ]; then rm -f "$stage"; fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL "$base/$archive" -o "$tmp/$archive"
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL "$base/checksums.txt" -o "$tmp/checksums.txt"
 expected=$(awk -v name="$archive" '$2 == name {print $1}' "$tmp/checksums.txt")
-if ! [[ "$expected" =~ ^[a-fA-F0-9]{64}$ ]]; then echo 'Missing or ambiguous archive checksum' >&2; exit 1; fi
+[[ "$expected" =~ ^[a-fA-F0-9]{64}$ ]] || fail 'Missing or ambiguous archive checksum.'
 if [ "$os" = darwin ]; then actual=$(shasum -a 256 "$tmp/$archive"); else actual=$(sha256sum "$tmp/$archive"); fi
 actual=${actual%% *}
-if [ "$actual" != "$expected" ]; then echo 'Archive checksum mismatch' >&2; exit 1; fi
-# Never extract a pathname from the archive into the installation directory.
-# Only regular files with exact release names are accepted, then raymond is streamed.
+[ "$actual" = "$expected" ] || fail 'Archive checksum mismatch.'
+# Do not extract archive paths into the installation directory. Accept exact
+# release filenames and regular files only, then stream the binary to staging.
 tar -tzf "$tmp/$archive" > "$tmp/names"
-if ! awk 'BEGIN {binary=0} $0=="raymond" {binary++;next} $0=="LICENSE"||$0=="README.md" {next} {exit 1} END {if(binary!=1)exit 1}' "$tmp/names"; then echo 'Unsafe archive paths' >&2; exit 1; fi
+if ! awk 'BEGIN {binary=0} $0=="raymond" {binary++;next} $0=="LICENSE"||$0=="README.md" {next} {exit 1} END {if(binary!=1)exit 1}' "$tmp/names"; then
+  fail 'Unsafe archive paths.'
+fi
 tar -tvzf "$tmp/$archive" > "$tmp/types"
-if ! awk 'substr($0,1,1)!="-" {exit 1}' "$tmp/types"; then echo 'Archive contains a non-regular file' >&2; exit 1; fi
-dir=${RAYMOND_INSTALL_DIR:-${HOME:?HOME required}/.local/bin}
-case "$dir" in /*) ;; *) echo 'Install directory must be absolute' >&2; exit 1;; esac
-case "$dir" in /|*$'\n'*) echo 'Unsafe install directory' >&2; exit 1;; esac
-mkdir -p "$dir"
+if ! awk 'substr($0,1,1)!="-" {exit 1}' "$tmp/types"; then fail 'Archive contains a non-regular file.'; fi
 stage=$(mktemp "$dir/.raymond.XXXXXX")
 tar -xOzf "$tmp/$archive" raymond > "$stage"
 chmod 755 "$stage"
+if ! binary_version=$("$stage" version); then
+  fail 'Downloaded binary could not run; the existing binary was left unchanged.'
+fi
+# Check again after downloading so newly created directories/links are refused.
+[ ! -d "$dir/raymond" ] && [ ! -L "$dir/raymond" ] || fail 'Destination changed to a directory or symbolic link.'
 mv -f "$stage" "$dir/raymond"
 stage=''
-"$dir/raymond" version
-printf 'Installed %s/raymond. Add %s to PATH if needed.\n' "$dir" "$dir"
-printf '%s\n' 'No DNS or service changes were made. Review docs/linux.md or docs/macos.md before explicit administrator installation.'
+printf '%s\nInstalled %s/raymond. Add %s to PATH if needed.\n' "$binary_version" "$dir" "$dir"
+printf '%s\n' 'No DNS or service changes were made. Follow the OS setup steps in https://github.com/cbspire/raymond#install-and-enable-os-integration.'

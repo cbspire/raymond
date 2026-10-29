@@ -20,3 +20,11 @@ func TestResources(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
+func TestServiceUsesProtectedHelperPath(t *testing.T) {
+	f := Files(config.Config{})
+	plist := string(f["/Library/LaunchDaemons/dev.raymond.plist"])
+	if !strings.Contains(plist, "<string>"+BinaryPath+"</string>") || strings.Contains(plist, "/usr/local/") {
+		t.Fatal("launchd binary must use a protected helper path outside Homebrew directories")
+	}
+}

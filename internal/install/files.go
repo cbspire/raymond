@@ -10,7 +10,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strings"
+
+	darwin "github.com/cbspire/raymond/internal/platform/darwin"
 )
 
 type Record struct {
@@ -118,10 +119,7 @@ func Apply(statePath string, files map[string][]byte, aliases []string) error {
 		if e = os.MkdirAll(filepath.Dir(p), 0755); e != nil {
 			return e
 		}
-		mode := os.FileMode(0644)
-		if strings.HasSuffix(p, "/raymond") {
-			mode = 0755
-		}
+		mode := resourceMode(p)
 		if e = exclusive(p, files[p], mode); e != nil {
 			return fmt.Errorf("partial installation; uninstall to roll back: %w", e)
 		}
@@ -182,4 +180,11 @@ func Remove(statePath string, s State) error {
 		return nil
 	}
 	return os.Remove(statePath)
+}
+
+func resourceMode(path string) os.FileMode {
+	if path == darwin.BinaryPath || path == "/usr/local/libexec/raymond/raymond" {
+		return 0755
+	}
+	return 0644
 }

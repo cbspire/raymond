@@ -120,3 +120,14 @@ func TestConcurrentLifecycleLock(t *testing.T) {
 	}
 	third()
 }
+
+func TestResourcePermissions(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		want os.FileMode
+	}{{"/Library/PrivilegedHelperTools/dev.raymond", 0755}, {"/usr/local/libexec/raymond/raymond", 0755}, {"/etc/raymond/config.yaml", 0644}, {"/etc/resolver/raymond", 0644}} {
+		if got := resourceMode(tc.path); got != tc.want {
+			t.Errorf("%s mode %o != %o", tc.path, got, tc.want)
+		}
+	}
+}
