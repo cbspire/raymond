@@ -147,6 +147,9 @@ func (c *Config) Validate() error {
 		if _, e = address(r.Target); e != nil {
 			return fmt.Errorf("target for %s: %w", r.Domain, e)
 		}
+		if r.Target == c.Proxy.Listen || r.Target == c.DNS.Listen {
+			return fmt.Errorf("installation target must not point to Raymond listeners")
+		}
 		c.Installations[i] = r
 	}
 	return nil

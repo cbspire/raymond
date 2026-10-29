@@ -1,0 +1,20 @@
+# Linux
+
+v0.1's integration targets distributions with **both systemd-resolved and systemd-networkd already active**. NetworkManager-only, non-systemd and container environments fail closed. Raymond never rewrites `/etc/resolv.conf` or global resolved settings.
+
+A dedicated networkd dummy interface `raymond0` carries only route-only DNS domains, with `DNSDefaultRoute=no`. Native systemd-networkd configures resolved per-link; DNS points at `127.0.0.43:53`. Unrelated link DNS and systemd drop-ins remain untouched. An existing interface or configuration resource is a conflict. This integration must pass the privileged runner smoke test before a release; it has not been verified in the development container.
+
+Review the binary and example YAML. Explicit administrator commands:
+
+```sh
+sudo install -o root -m 755 bin/raymond /usr/local/bin/raymond
+sudo /usr/local/bin/raymond install --config examples/raymond.yaml
+sudo /usr/local/bin/raymond start
+/usr/local/bin/raymond status
+sudo /usr/local/bin/raymond stop
+sudo /usr/local/bin/raymond uninstall
+```
+
+Install refuses existing unrelated files. An identical reinstall is a no-op; changed config or binary requires stop, uninstall and reinstall from the edited source YAML. Retain your source configuration. The installed config is `/etc/raymond/config.yaml`, root-owned, mode 0644; it must not contain secrets. The systemd service runs with DynamicUser and only CAP_NET_BIND_SERVICE. It has no network-administration capability.
+
+The ownership journal at `/var/lib/raymond/state.json` records file hashes before publishing resources atomically. Interrupted setup retains that journal for explicit rollback. Uninstall refuses modified files and unproven interface ownership. Do not delete the journal manually. Empty installation directories and system journal logs may remain; unrelated files are preserved. Administrator repair is required if an operator edits installed resources: restore the recorded content before uninstalling. System-level crash/reboot recovery remains subject to runner validation.
