@@ -84,11 +84,17 @@ func Installed() (State, error) {
 	}
 	return s, Verify(s)
 }
-func aliases() map[string]bool {
+func aliases() (map[string]bool, error) {
 	found := map[string]bool{}
-	is, _ := net.Interfaces()
+	is, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
 	for _, i := range is {
-		as, _ := i.Addrs()
+		as, err := i.Addrs()
+		if err != nil {
+			return nil, err
+		}
 		for _, a := range as {
 			ip, _, e := net.ParseCIDR(a.String())
 			if e == nil {
@@ -96,7 +102,7 @@ func aliases() map[string]bool {
 			}
 		}
 	}
-	return found
+	return found, nil
 }
 func Install(path string) error {
 	if e := root(); e != nil {
@@ -175,9 +181,22 @@ func Install(path string) error {
 		if _, e = net.InterfaceByName("raymond0"); e == nil {
 			return fmt.Errorf("raymond0 already exists; refusing ambiguous ownership")
 		}
+		assigned, e := aliases()
+		if e != nil {
+			return e
+		}
+		for _, ip := range []string{"192.0.2.42", "127.0.0.43"} {
+			if assigned[ip] {
+				return fmt.Errorf("reserved Raymond interface address %s is already assigned; refusing to change its routing", ip)
+			}
+		}
 	} else {
+		assigned, e := aliases()
+		if e != nil {
+			return e
+		}
 		for _, a := range []string{"127.0.0.42", "127.0.0.43"} {
-			if !aliases()[a] {
+			if !assigned[a] {
 				created = append(created, a)
 			}
 		}
@@ -245,11 +264,15 @@ func ensureAliasesLocked() error {
 	if e != nil {
 		return e
 	}
+	assigned, e := aliases()
+	if e != nil {
+		return e
+	}
 	for _, a := range s.Aliases {
 		if a != "127.0.0.42" && a != "127.0.0.43" {
 			return fmt.Errorf("invalid alias journal")
 		}
-		if !aliases()[a] {
+		if !assigned[a] {
 			if e = native("ifconfig", "lo0", "alias", a, "up"); e != nil {
 				return e
 			}
@@ -378,11 +401,15 @@ func Uninstall() error {
 		}
 	}
 	if runtime.GOOS == "darwin" {
+		assigned, e := aliases()
+		if e != nil {
+			return e
+		}
 		for _, a := range s.Aliases {
 			if a != "127.0.0.42" && a != "127.0.0.43" {
 				return fmt.Errorf("invalid alias journal")
 			}
-			if aliases()[a] {
+			if assigned[a] {
 				if e = native("ifconfig", "lo0", "-alias", a); e != nil {
 					return e
 				}
@@ -402,6 +429,9 @@ func Uninstall() error {
 	}
 	if runtime.GOOS == "linux" {
 		if e = native("systemctl", "daemon-reload"); e != nil {
+			return e
+		}
+		if e = native("udevadm", "control", "--reload"); e != nil {
 			return e
 		}
 		if e = native("networkctl", "reload"); e != nil {

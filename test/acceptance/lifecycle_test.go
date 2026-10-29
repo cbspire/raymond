@@ -368,6 +368,30 @@ func TestInstalledLifecycle(t *testing.T) {
 	if _, e = os.Stat("/var/lib/raymond/state.json"); !os.IsNotExist(e) {
 		t.Fatal("conflict left an installation journal")
 	}
+
+	if runtime.GOOS == "linux" {
+		const fixture = "raymond-ip-test"
+		if _, err := net.InterfaceByName(fixture); err == nil {
+			t.Fatal("address-collision fixture already exists")
+		}
+		must(t, nativePath("ip"), "link", "add", "name", fixture, "type", "dummy")
+		func() {
+			defer func() {
+				out, err := command(nativePath("ip"), "link", "delete", fixture)
+				if err != nil {
+					t.Errorf("collision fixture cleanup: %v %s", err, out)
+				}
+			}()
+			must(t, nativePath("ip"), "address", "add", "192.0.2.42/32", "dev", fixture)
+			out, err := command(binary, "install", "--config", configPath)
+			if err == nil || !strings.Contains(string(out), "already assigned") {
+				t.Fatalf("reserved interface address was not refused: %v %s", err, out)
+			}
+			if _, err = net.InterfaceByName("raymond0"); err == nil {
+				t.Fatal("address conflict created a Raymond interface")
+			}
+		}()
+	}
 	a := &apps{connections: map[string]bool{}}
 	localhost := a.serve(t, 80)
 	a.serve(t, 9001)

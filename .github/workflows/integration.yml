@@ -47,6 +47,10 @@ jobs:
             dist/*.tar.gz
             dist/checksums.txt
             dist/metadata.json
+            scripts/install.sh
+            README.md
+            docs/installation.md
+            examples/raymond.yaml
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
