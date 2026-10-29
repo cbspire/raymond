@@ -35,6 +35,7 @@ func command(name string, args ...string) ([]byte, error) {
 }
 func must(t *testing.T, name string, args ...string) []byte {
 	t.Helper()
+	t.Logf("exec %s %v", name, args)
 	out, e := command(name, args...)
 	if e != nil {
 		t.Fatalf("%s %v: %v\n%s", name, args, e, out)
