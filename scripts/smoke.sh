@@ -21,4 +21,4 @@ sudo env PATH="$native_bin" \
   GODEBUG=netdns=cgo \
   RAYMOND_PRIVILEGED_SMOKE=1 RAYMOND_ARCHIVE_DIR="$root/dist" \
   RAYMOND_INSTALL_SCRIPT="$root/scripts/install.sh" RAYMOND_TEST_USER="$(id -un)" \
-  "$root/bin/raymond-acceptance" -test.v -test.timeout=8m
+  "$root/bin/raymond-acceptance" -test.v -test.timeout=8m 2>&1 | tee "$root/acceptance.log"

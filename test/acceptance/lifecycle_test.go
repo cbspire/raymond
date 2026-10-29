@@ -431,12 +431,17 @@ func TestInstalledLifecycle(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	assertLoopbackListeners(t, old)
 	rss := must(t, nativePath("ps"), "-o", "rss=", "-p", strconv.Itoa(old))
 	t.Logf("daemon RSS KiB: %s", strings.TrimSpace(string(rss)))
 	if runtime.GOOS == "linux" {
 		user := strings.TrimSpace(string(must(t, nativePath("ps"), "-o", "user=", "-p", strconv.Itoa(old))))
 		if user == "root" {
 			t.Fatal("Linux service unexpectedly runs as root")
+		}
+		caps := strings.TrimSpace(string(must(t, nativePath("systemctl"), "show", "--property=CapabilityBoundingSet", "--value", "raymond.service")))
+		if caps != "cap_net_bind_service" {
+			t.Fatalf("excess Linux service capabilities: %s", caps)
 		}
 	}
 	// Simulate an unexpected crash; the actual service manager must recover it.

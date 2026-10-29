@@ -30,3 +30,23 @@ jobs:
         env:
           RAYMOND_PRIVILEGED_SMOKE: '1'
         run: scripts/smoke.sh
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: raymond-acceptance-${{ runner.os }}-${{ github.run_attempt }}
+          path: acceptance.log
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload candidate archives
+        if: runner.os == 'Linux' && success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: raymond-candidate-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+            dist/metadata.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

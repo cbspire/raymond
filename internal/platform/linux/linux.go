@@ -17,8 +17,9 @@ func Files(c config.Config) map[string][]byte {
 		domains[i] = "~" + z
 	}
 	return map[string][]byte{
+		"/etc/systemd/network/80-raymond.link":    []byte(Marker + "[Match]\nOriginalName=raymond0\n\n[Link]\nAlias=Raymond private DNS routing\n"),
 		"/etc/systemd/network/80-raymond.netdev":  []byte(Marker + "[NetDev]\nName=raymond0\nKind=dummy\nDescription=Raymond private DNS routing\n"),
-		"/etc/systemd/network/80-raymond.network": []byte(Marker + "[Match]\nName=raymond0\n\n[Link]\nRequiredForOnline=no\n\n[Network]\nAddress=169.254.254.42/32\nLinkLocalAddressing=no\nIPv6AcceptRA=no\nDNS=127.0.0.43\nDomains=" + strings.Join(domains, " ") + "\nDNSDefaultRoute=no\n"),
+		"/etc/systemd/network/80-raymond.network": []byte(Marker + "[Match]\nName=raymond0\n\n[Link]\nRequiredForOnline=no\n\n[Network]\nAddress=169.254.254.42/32\nAddress=127.0.0.43/32\nLinkLocalAddressing=no\nIPv6AcceptRA=no\nDNS=127.0.0.43\nDomains=" + strings.Join(domains, " ") + "\nDNSDefaultRoute=no\n"),
 		"/etc/systemd/system/raymond.service": []byte(Marker + `[Unit]
 Description=Raymond local DNS and HTTP
 After=network.target systemd-resolved.service systemd-networkd.service
