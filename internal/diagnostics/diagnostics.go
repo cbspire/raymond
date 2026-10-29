@@ -9,6 +9,9 @@ import (
 
 func Check(c config.Config) error {
 	for _, a := range []string{c.Proxy.Listen, c.DNS.Listen} {
+		if e := checkWildcard(a); e != nil {
+			return e
+		}
 		l, e := net.Listen("tcp4", a)
 		if e != nil {
 			return fmt.Errorf("cannot bind %s (conflict, missing loopback alias, or privilege): %w; leave existing services running", a, e)

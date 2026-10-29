@@ -21,7 +21,11 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: true
-      - run: make build
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de
+        with:
+          distribution: goreleaser
+          version: v2.16.0
+          args: release --snapshot --clean
       - name: Reviewed disposable-runner OS lifecycle
         env:
           RAYMOND_PRIVILEGED_SMOKE: '1'

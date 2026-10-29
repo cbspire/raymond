@@ -4,7 +4,7 @@ set -euo pipefail
 repo=cbspire/raymond
 fail() { printf 'Raymond installer: %s\n' "$*" >&2; exit 1; }
 [ "$#" -eq 0 ] || fail 'Use RAYMOND_VERSION and RAYMOND_INSTALL_DIR environment variables; no arguments are accepted.'
-for tool in uname curl tar awk mktemp mkdir chmod mv rm; do
+for tool in uname tar awk mktemp mkdir chmod mv rm cp; do
   command -v "$tool" >/dev/null 2>&1 || fail "Required command not found: $tool"
 done
 case "$(uname -s)" in
@@ -27,14 +27,22 @@ mkdir -p "$dir"
 dir=$(cd "$dir" && pwd -P)
 [ "$dir" != / ] || fail 'Refusing to install into the filesystem root.'
 [ ! -d "$dir/raymond" ] && [ ! -L "$dir/raymond" ] || fail 'Destination raymond is a directory or symbolic link; resolve it explicitly first.'
+archive_dir=${RAYMOND_ARCHIVE_DIR:-}
+if [ -n "$archive_dir" ]; then
+  case "$archive_dir" in /*) ;; *) fail 'RAYMOND_ARCHIVE_DIR must be absolute.';; esac
+  [ -d "$archive_dir" ] || fail 'Offline archive directory does not exist.'
+else
+  command -v curl >/dev/null 2>&1 || fail 'Required command not found: curl'
+fi
 version=${RAYMOND_VERSION:-}
+if [ -n "$archive_dir" ] && [ -z "$version" ]; then fail 'RAYMOND_VERSION is required for offline archive installation.'; fi
 if [ -z "$version" ]; then
   if ! url=$(curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest"); then
     fail 'Could not resolve the latest stable release. Check connectivity and GitHub Releases, or build from source.'
   fi
   version=${url##*/}
 fi
-[[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'Expected an immutable stable version such as v0.1.0.'
+[[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]] || fail 'Expected an immutable version such as v0.1.0 or v0.1.0-rc.1.'
 archive="raymond_${version#v}_${os}_${arch}.tar.gz"
 base="https://github.com/$repo/releases/download/$version"
 tmp=$(mktemp -d)
@@ -46,8 +54,13 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL "$base/$archive" -o "$tmp/$archive"
-curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL "$base/checksums.txt" -o "$tmp/checksums.txt"
+if [ -n "$archive_dir" ]; then
+  cp "$archive_dir/$archive" "$tmp/$archive"
+  cp "$archive_dir/checksums.txt" "$tmp/checksums.txt"
+else
+  curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL "$base/$archive" -o "$tmp/$archive"
+  curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL "$base/checksums.txt" -o "$tmp/checksums.txt"
+fi
 expected=$(awk -v name="$archive" '$2 == name {print $1}' "$tmp/checksums.txt")
 [[ "$expected" =~ ^[a-fA-F0-9]{64}$ ]] || fail 'Missing or ambiguous archive checksum.'
 if [ "$os" = darwin ]; then actual=$(shasum -a 256 "$tmp/$archive"); else actual=$(sha256sum "$tmp/$archive"); fi

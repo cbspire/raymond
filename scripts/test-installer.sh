@@ -108,7 +108,17 @@ export RAYMOND_VERSION=v0.1.0 FIXTURE_OS=Unsupported
 reject 'unsupported OS'; installed
 export FIXTURE_OS=Linux FIXTURE_ARCH=unsupported
 reject 'unsupported architecture'; installed
-export FIXTURE_ARCH=x86_64 RAYMOND_INSTALL_DIR=relative/path
+export FIXTURE_ARCH=x86_64 RAYMOND_INSTALL_DIR="$tmp/install space"
+# Offline archive mode must not contact curl, even when it would fail.
+export RAYMOND_ARCHIVE_DIR="$FIXTURE" FAIL_DOWNLOAD=1
+package_fixture
+bash "$root/scripts/install.sh" > /dev/null
+installed
+unset RAYMOND_VERSION
+reject 'offline archive install without a pinned version'
+export RAYMOND_VERSION=v0.1.0
+unset RAYMOND_ARCHIVE_DIR FAIL_DOWNLOAD
+export RAYMOND_INSTALL_DIR=relative/path
 reject 'relative install directory'
 [ -z "$(ls -A "$tmp/downloads")" ]
 echo 'Installer platform selection, latest/pinned download, upgrade preservation, archive, path and failure fixtures passed'

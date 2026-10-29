@@ -32,11 +32,7 @@ func TestOfflineRuntime(t *testing.T) {
 		}
 		return
 	}
-	binary := os.Getenv("RAYMOND_BINARY")
-	if !filepath.IsAbs(binary) {
-		t.Fatal("missing native executable")
-	}
-	noRuntimeDependencies(t, binary)
+	binary := candidate(t)
 	if runtime.GOOS == "linux" {
 		must(t, nativePath("ip"), "link", "set", "lo", "up")
 		if out := must(t, nativePath("ip"), "route", "show", "default"); strings.TrimSpace(string(out)) != "" {

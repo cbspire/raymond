@@ -281,11 +281,7 @@ func TestInstalledLifecycle(t *testing.T) {
 	if _, e := os.Lstat("/var/lib/raymond/state.json"); !os.IsNotExist(e) {
 		t.Fatal("runner already has an installation; refusing to alter it")
 	}
-	src := os.Getenv("RAYMOND_BINARY")
-	if !filepath.IsAbs(src) {
-		t.Fatal("RAYMOND_BINARY must identify a native artifact")
-	}
-	noRuntimeDependencies(t, src)
+	src := candidate(t)
 	if e := os.MkdirAll("/var/lib", 0755); e != nil {
 		t.Fatal(e)
 	}
