@@ -1,6 +1,6 @@
 # v0.1 implementation validation
 
-This is an implementation candidate, **not a published or certified v0.1.0 release**. M0–M5 code and M6 local acceptance tests are present as focused commits on stacked feature branches. Required real-OS acceptance remains open.
+This is an implementation candidate, **not a published or certified v0.1.0 release**. M0–M5 code and M6 local acceptance tests are present as focused commits on stacked feature branches. Required real-OS acceptance remains open. Ordinary macOS integration fixtures validate production configuration and then use high ports on its preexisting localhost address; actual dedicated-address aliases are tested only by privileged smoke jobs.
 
 ## Verified locally (Linux amd64, Go 1.26.10)
 
@@ -14,7 +14,7 @@ This is an implementation candidate, **not a published or certified v0.1.0 relea
 - govulncheck v1.9.0: no vulnerabilities found with current dependencies.
 - actionlint v1.7.7: workflows validated (shellcheck/pyflakes integrations not installed).
 - GoReleaser v2.16.0: configuration validates and local snapshot archives/checksums build for darwin/amd64, darwin/arm64, linux/amd64 and linux/arm64. No tag, remote push or release publication was performed.
-- Standalone native executable: 50 concurrent local HTTP requests preserve Host and URL, followed by successful SIGTERM shutdown. A diagnostic run took 1.154 seconds with 11,024 KiB RSS after the requests. These measurements include the Python load driver/backend and do not define a performance SLA. The Go integration run under the race detector took about 70 ms for 50 DNS+HTTP requests; the workloads differ and are not comparable benchmarks.
+- Standalone native executable: 50 concurrent local HTTP requests preserve Host and URL, followed by successful SIGTERM shutdown. A diagnostic run took 1.154 seconds with 11,024 KiB RSS after the requests. The elapsed time reflects the Python load driver/backend; RSS measures only the Raymond process. These diagnostics do not define a performance SLA. The Go integration run under the race detector took about 70 ms for 50 DNS+HTTP requests; the workloads differ and are not comparable benchmarks.
 
 ## Required external acceptance (not run)
 

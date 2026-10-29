@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -29,10 +30,11 @@ func port(t *testing.T, ip string) string {
 func TestForegroundDNSAndHTTP(t *testing.T) {
 	b := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, r.Host+" "+r.URL.RequestURI()) }))
 	defer b.Close()
-	c := config.Config{Version: 1, DNS: config.DNS{Zones: []string{"test", "internal"}, Listen: port(t, "127.0.0.43")}, Proxy: config.Proxy{Listen: port(t, "127.0.0.42")}, Installations: []config.Installation{{Domain: "install.web.test", Target: strings.TrimPrefix(b.URL, "http://")}}}
+	c := config.Config{Version: 1, DNS: config.DNS{Zones: []string{"test", "internal"}, Listen: "127.0.0.43:53"}, Proxy: config.Proxy{Listen: "127.0.0.42:80"}, Installations: []config.Installation{{Domain: "install.web.test", Target: strings.TrimPrefix(b.URL, "http://")}}}
 	if e := c.Validate(); e != nil {
 		t.Fatal(e)
 	}
+	fixtureListeners(t, &c)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- server.Run(ctx, c) }()
@@ -81,7 +83,7 @@ func TestForegroundDNSAndHTTP(t *testing.T) {
 }
 
 func TestConcurrentFiftyHosts(t *testing.T) {
-	c := config.Config{Version: 1, DNS: config.DNS{Zones: []string{"test", "internal"}, Listen: port(t, "127.0.0.43")}, Proxy: config.Proxy{Listen: port(t, "127.0.0.42")}}
+	c := config.Config{Version: 1, DNS: config.DNS{Zones: []string{"test", "internal"}, Listen: "127.0.0.43:53"}, Proxy: config.Proxy{Listen: "127.0.0.42:80"}}
 	for i := 0; i < 10; i++ {
 		index := i
 		b := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +99,7 @@ func TestConcurrentFiftyHosts(t *testing.T) {
 	if e := c.Validate(); e != nil {
 		t.Fatal(e)
 	}
+	fixtureListeners(t, &c)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- server.Run(ctx, c) }()
@@ -154,4 +157,16 @@ func TestConcurrentFiftyHosts(t *testing.T) {
 	}
 	wg.Wait()
 	t.Logf("50 concurrent DNS+HTTP requests completed in %s (diagnostic only)", time.Since(start))
+}
+
+// Keep ordinary macOS tests unprivileged: validate production config first,
+// then inject high-port socket addresses into the internal server fixture.
+// Real dedicated-address alias behavior belongs to privileged OS smoke tests.
+func fixtureListeners(t *testing.T, c *config.Config) {
+	proxyIP, dnsIP := "127.0.0.42", "127.0.0.43"
+	if runtime.GOOS == "darwin" {
+		proxyIP, dnsIP = "127.0.0.1", "127.0.0.1"
+	}
+	c.Proxy.Listen = port(t, proxyIP)
+	c.DNS.Listen = port(t, dnsIP)
 }

@@ -1,4 +1,4 @@
-//go:build port80
+//go:build port80 && linux
 
 package integration
 
