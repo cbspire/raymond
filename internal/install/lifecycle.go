@@ -38,7 +38,7 @@ func root() error {
 	return nil
 }
 func native(name string, args ...string) error {
-	paths := map[string]string{"systemctl": "/usr/bin/systemctl", "resolvectl": "/usr/bin/resolvectl", "networkctl": "/usr/bin/networkctl", "ip": "/usr/sbin/ip", "launchctl": "/bin/launchctl", "ifconfig": "/sbin/ifconfig"}
+	paths := map[string]string{"systemctl": "/usr/bin/systemctl", "resolvectl": "/usr/bin/resolvectl", "networkctl": "/usr/bin/networkctl", "udevadm": "/usr/bin/udevadm", "ip": "/usr/sbin/ip", "launchctl": "/bin/launchctl", "ifconfig": "/sbin/ifconfig"}
 	path, ok := paths[name]
 	if !ok {
 		return fmt.Errorf("unsupported native command")
@@ -205,6 +205,9 @@ func Install(path string) error {
 		if e = native("systemctl", "daemon-reload"); e != nil {
 			return fail(e)
 		}
+		if e = native("udevadm", "control", "--reload"); e != nil {
+			return fail(e)
+		}
 		if e = native("networkctl", "reload"); e != nil {
 			return fail(e)
 		}
@@ -287,6 +290,23 @@ func Control(action string) error {
 		return e
 	}
 	if runtime.GOOS == "linux" {
+		if action == "start" || action == "restart" {
+			c, e := config.Load(ConfigPath)
+			if e != nil {
+				return e
+			}
+			if e = PlatformCheck(); e != nil {
+				return e
+			}
+			if _, e = net.InterfaceByName("raymond0"); e != nil {
+				if e = native("networkctl", "reload"); e != nil {
+					return e
+				}
+			}
+			if e = checkLinuxLink(c); e != nil {
+				return e
+			}
+		}
 		return native("systemctl", action, "raymond.service")
 	}
 	if runtime.GOOS != "darwin" {

@@ -300,6 +300,15 @@ func TestInstalledLifecycle(t *testing.T) {
 	binary := filepath.Join(dir, "raymond")
 	write(t, binary, b, 0755)
 	t.Cleanup(func() {
+		if t.Failed() && runtime.GOOS == "linux" {
+			for _, v := range []struct {
+				name string
+				args []string
+			}{{"systemctl", []string{"status", "--no-pager", "--full", "raymond.service"}}, {"journalctl", []string{"-u", "raymond.service", "-n", "50", "--no-pager"}}, {"resolvectl", []string{"status", "raymond0"}}, {"ip", []string{"addr", "show", "dev", "raymond0"}}, {"ip", []string{"route", "show", "table", "local"}}} {
+				out, _ := command(nativePath(v.name), v.args...)
+				t.Logf("%s diagnostics:\n%s", v.name, out)
+			}
+		}
 		out, e := command(binary, "uninstall")
 		if e != nil {
 			t.Errorf("cleanup uninstall: %v\n%s", e, out)
@@ -514,7 +523,7 @@ func TestInstalledLifecycle(t *testing.T) {
 			}
 		}
 	} else {
-		for _, path := range []string{"/etc/systemd/network/80-raymond.netdev", "/etc/systemd/network/80-raymond.network", "/etc/systemd/system/raymond.service", "/usr/libexec/raymond/raymond"} {
+		for _, path := range []string{"/etc/systemd/network/80-raymond.netdev", "/etc/systemd/network/80-raymond.link", "/etc/systemd/network/80-raymond.network", "/etc/systemd/system/raymond.service", "/usr/libexec/raymond/raymond"} {
 			if _, e = os.Lstat(path); !os.IsNotExist(e) {
 				t.Error("owned resource remains:", path)
 			}
