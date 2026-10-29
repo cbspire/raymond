@@ -1,15 +1,28 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/cbspire/raymond/internal/config"
+	"github.com/cbspire/raymond/internal/server"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 var version = "dev"
 var commit = "unknown"
 
 func run(args []string) error {
+	if len(args) == 3 && args[0] == "serve" && args[1] == "--config" {
+		c, e := config.Load(args[2])
+		if e != nil {
+			return e
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return server.Run(ctx, c)
+	}
 	if len(args) == 1 && args[0] == "version" {
 		fmt.Printf("raymond %s (%s)\n", version, commit)
 		return nil
