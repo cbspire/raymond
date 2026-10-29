@@ -103,3 +103,20 @@ func TestAtomicNoReplace(t *testing.T) {
 		t.Fatal(string(b))
 	}
 }
+func TestConcurrentLifecycleLock(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "install.lock")
+	release, e := lock(p)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if second, e := lock(p); e == nil {
+		second()
+		t.Fatal("concurrent lifecycle operation accepted")
+	}
+	release()
+	third, e := lock(p)
+	if e != nil {
+		t.Fatal(e)
+	}
+	third()
+}

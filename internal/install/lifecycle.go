@@ -2,14 +2,17 @@ package install
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/cbspire/raymond/internal/config"
 	"github.com/cbspire/raymond/internal/diagnostics"
@@ -34,7 +37,9 @@ func native(name string, args ...string) error {
 	if !ok {
 		return fmt.Errorf("unsupported native command")
 	}
-	c := exec.Command(path, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	c := exec.CommandContext(ctx, path, args...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	return c.Run()
@@ -91,6 +96,11 @@ func Install(path string) error {
 	if e := root(); e != nil {
 		return e
 	}
+	unlock, e := lifecycleLock()
+	if e != nil {
+		return e
+	}
+	defer unlock()
 	c, e := config.Load(path)
 	if e != nil {
 		return e
@@ -131,6 +141,9 @@ func Install(path string) error {
 		return e
 	}
 	if old, e := ReadState(statePath); e == nil {
+		if e = trusted(statePath); e != nil {
+			return e
+		}
 		if e = Verify(old); e != nil {
 			return e
 		}
@@ -150,7 +163,7 @@ func Install(path string) error {
 	}
 	var created []string
 	if runtime.GOOS == "linux" {
-		if e = linux.Check(native); e != nil {
+		if e = PlatformCheck(); e != nil {
 			return e
 		}
 		if _, e = net.InterfaceByName("raymond0"); e == nil {
@@ -176,7 +189,7 @@ func Install(path string) error {
 		return fmt.Errorf("installation journal retained; run sudo raymond uninstall to roll back: %w", e)
 	}
 	if runtime.GOOS == "darwin" {
-		if e = EnsureAliases(); e != nil {
+		if e = ensureAliasesLocked(); e != nil {
 			return fail(e)
 		}
 		if e = diagnostics.Check(c); e != nil {
@@ -189,6 +202,9 @@ func Install(path string) error {
 		if e = native("networkctl", "reload"); e != nil {
 			return fail(e)
 		}
+		if e = checkLinuxLink(c); e != nil {
+			return fail(e)
+		}
 		if e = native("systemctl", "enable", "raymond.service"); e != nil {
 			return fail(e)
 		}
@@ -196,6 +212,20 @@ func Install(path string) error {
 	return nil
 }
 func EnsureAliases() error {
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+	if e := root(); e != nil {
+		return e
+	}
+	unlock, e := lifecycleLock()
+	if e != nil {
+		return e
+	}
+	defer unlock()
+	return ensureAliasesLocked()
+}
+func ensureAliasesLocked() error {
 	if runtime.GOOS != "darwin" {
 		return nil
 	}
@@ -219,6 +249,29 @@ func EnsureAliases() error {
 	return nil
 }
 func Control(action string) error {
+	if action == "status" {
+		if runtime.GOOS == "linux" {
+			if e := trusted("/etc/systemd/system/raymond.service"); e != nil {
+				return e
+			}
+			return native("systemctl", "status", "raymond.service")
+		}
+		if runtime.GOOS == "darwin" {
+			if e := trusted("/Library/LaunchDaemons/dev.raymond.plist"); e != nil {
+				return e
+			}
+			return native("launchctl", "print", "system/dev.raymond")
+		}
+		return fmt.Errorf("unsupported platform")
+	}
+	if e := root(); e != nil {
+		return e
+	}
+	unlock, e := lifecycleLock()
+	if e != nil {
+		return e
+	}
+	defer unlock()
 	if action != "status" {
 		if e := root(); e != nil {
 			return e
@@ -235,7 +288,7 @@ func Control(action string) error {
 	}
 	switch action {
 	case "start":
-		if e := EnsureAliases(); e != nil {
+		if e := ensureAliasesLocked(); e != nil {
 			return e
 		}
 		if native("launchctl", "print", "system/dev.raymond") == nil {
@@ -255,6 +308,11 @@ func Uninstall() error {
 	if e := root(); e != nil {
 		return e
 	}
+	unlock, e := lifecycleLock()
+	if e != nil {
+		return e
+	}
+	defer unlock()
 	s, e := ReadState(statePath)
 	if os.IsNotExist(e) {
 		return nil
@@ -275,8 +333,10 @@ func Uninstall() error {
 				return e
 			}
 		}
-		if e = native("systemctl", "disable", "raymond.service"); e != nil {
-			return e
+		if _, err := os.Stat("/etc/systemd/system/raymond.service"); err == nil {
+			if e = native("systemctl", "disable", "raymond.service"); e != nil {
+				return e
+			}
 		}
 	case "darwin":
 		if native("launchctl", "print", "system/dev.raymond") == nil {
@@ -339,5 +399,96 @@ func trustedParent(path string) error {
 			return e
 		}
 		p = filepath.Dir(p)
+	}
+}
+
+func lifecycleLock() (func(), error) {
+	if e := trustedParent(statePath); e != nil {
+		return nil, e
+	}
+	if e := os.MkdirAll(filepath.Dir(statePath), 0700); e != nil {
+		return nil, e
+	}
+	return lock(filepath.Join(filepath.Dir(statePath), "install.lock"))
+}
+func lock(path string) (func(), error) {
+	if e := SafePath(path); e != nil {
+		return nil, e
+	}
+	f, e := os.OpenFile(path, os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	if e != nil {
+		return nil, e
+	}
+	if e = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); e != nil {
+		f.Close()
+		return nil, fmt.Errorf("another Raymond lifecycle operation is active: %w", e)
+	}
+	return func() { _ = f.Close() }, nil
+}
+
+// PlatformCheck checks existing resolver compatibility without changing it.
+func PlatformCheck() error {
+	if runtime.GOOS == "linux" {
+		if e := linux.Check(native); e != nil {
+			return e
+		}
+		p, e := filepath.EvalSymlinks("/etc/resolv.conf")
+		if e != nil || p != "/run/systemd/resolve/stub-resolv.conf" {
+			return fmt.Errorf("linux integration requires the existing systemd-resolved stub resolv.conf symlink; refusing to rewire the resolver")
+		}
+	}
+	return nil
+}
+func checkLinuxLink(c config.Config) error {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, e := net.InterfaceByName("raymond0"); e == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("networkd did not create raymond0")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if e := native("networkctl", "reconfigure", "raymond0"); e != nil {
+		return e
+	}
+	want := append([]string(nil), c.DNS.Zones...)
+	for i := range want {
+		want[i] = "~" + want[i]
+	}
+	sort.Strings(want)
+	for {
+		var last error
+		for _, q := range []struct {
+			kind string
+			want []string
+		}{{"dns", []string{"127.0.0.43"}}, {"domain", want}, {"default-route", []string{"no"}}} {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			b, e := exec.CommandContext(ctx, "/usr/bin/resolvectl", q.kind, "raymond0").Output()
+			cancel()
+			if e != nil {
+				last = e
+				break
+			}
+			parts := strings.SplitN(string(b), ":", 2)
+			if len(parts) != 2 {
+				last = fmt.Errorf("unexpected resolvectl output")
+				break
+			}
+			got := strings.Fields(parts[1])
+			sort.Strings(got)
+			if strings.Join(got, " ") != strings.Join(q.want, " ") {
+				last = fmt.Errorf("unproven route-only DNS ownership on raymond0 (%s)", q.kind)
+				break
+			}
+		}
+		if last == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return last
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }

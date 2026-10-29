@@ -5,7 +5,7 @@ case "$(uname -s)" in Darwin) os=darwin;; Linux) os=linux;; *) echo 'Unsupported
 case "$(uname -m)" in arm64|aarch64) arch=arm64;; x86_64|amd64) arch=amd64;; *) echo 'Unsupported architecture' >&2; exit 1;; esac
 version=${RAYMOND_VERSION:-}
 if [ -z "$version" ]; then
-  url=$(curl --proto '=https' --tlsv1.2 -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest")
+  url=$(curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest")
   version=${url##*/}
 fi
 if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo 'Expected an immutable stable version such as v0.1.0' >&2; exit 1; fi
@@ -14,8 +14,8 @@ base="https://github.com/$repo/releases/download/$version"
 tmp=$(mktemp -d)
 stage=''
 trap 'rm -rf "$tmp"; if [ -n "$stage" ]; then rm -f "$stage"; fi' EXIT
-curl --proto '=https' --tlsv1.2 -fsSL "$base/$archive" -o "$tmp/$archive"
-curl --proto '=https' --tlsv1.2 -fsSL "$base/checksums.txt" -o "$tmp/checksums.txt"
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL "$base/$archive" -o "$tmp/$archive"
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL "$base/checksums.txt" -o "$tmp/checksums.txt"
 expected=$(awk -v name="$archive" '$2 == name {print $1}' "$tmp/checksums.txt")
 if ! [[ "$expected" =~ ^[a-fA-F0-9]{64}$ ]]; then echo 'Missing or ambiguous archive checksum' >&2; exit 1; fi
 if [ "$os" = darwin ]; then actual=$(shasum -a 256 "$tmp/$archive"); else actual=$(sha256sum "$tmp/$archive"); fi

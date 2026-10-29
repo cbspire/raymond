@@ -67,3 +67,16 @@ func FuzzNormalize(f *testing.F) {
 		}
 	})
 }
+
+func TestUnicodeCaseFoldRejected(t *testing.T) {
+	if _, e := Normalize("Kelvin.test"); e == nil {
+		t.Fatal("Unicode was accepted through ASCII case folding")
+	}
+}
+func TestNonCanonicalPort(t *testing.T) {
+	for _, s := range []string{"127.0.0.1:+80", "127.0.0.1:080"} {
+		if _, e := address(s); e == nil {
+			t.Fatalf("accepted non-canonical port %s", s)
+		}
+	}
+}

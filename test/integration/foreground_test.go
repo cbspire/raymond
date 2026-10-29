@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -77,4 +78,80 @@ func TestForegroundDNSAndHTTP(t *testing.T) {
 	if string(body) != "deep.site.install.web.test /wp-admin/?x=1" {
 		t.Fatalf("%s", body)
 	}
+}
+
+func TestConcurrentFiftyHosts(t *testing.T) {
+	c := config.Config{Version: 1, DNS: config.DNS{Zones: []string{"test", "internal"}, Listen: port(t, "127.0.0.43")}, Proxy: config.Proxy{Listen: port(t, "127.0.0.42")}}
+	for i := 0; i < 10; i++ {
+		index := i
+		b := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "%d %s %s", index, r.Host, r.URL.RequestURI())
+		}))
+		defer b.Close()
+		zone := "test"
+		if i >= 5 {
+			zone = "internal"
+		}
+		c.Installations = append(c.Installations, config.Installation{Domain: fmt.Sprintf("install%d.web.%s", i, zone), Target: strings.TrimPrefix(b.URL, "http://")})
+	}
+	if e := c.Validate(); e != nil {
+		t.Fatal(e)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- server.Run(ctx, c) }()
+	defer func() {
+		cancel()
+		if e := <-done; e != nil {
+			t.Error(e)
+		}
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		conn, e := net.DialTimeout("tcp4", c.Proxy.Listen, 100*time.Millisecond)
+		if e == nil {
+			conn.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal(e)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	transport := &http.Transport{Proxy: nil, MaxIdleConnsPerHost: 10}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 3 * time.Second}
+	start := time.Now()
+	var wg sync.WaitGroup
+	for i, r := range c.Installations {
+		for j := 0; j < 5; j++ {
+			wg.Add(1)
+			go func(i, j int, r config.Installation) {
+				defer wg.Done()
+				host := fmt.Sprintf("deep.site%d.%s", j, r.Domain)
+				q := new(mdns.Msg)
+				q.SetQuestion(host+".", mdns.TypeA)
+				a, _, e := (&mdns.Client{Timeout: time.Second}).Exchange(q, c.DNS.Listen)
+				if e != nil || len(a.Answer) != 1 {
+					t.Errorf("DNS %s: %v", host, e)
+					return
+				}
+				req, _ := http.NewRequest("GET", "http://"+c.Proxy.Listen+"/wp-admin/?original=1", nil)
+				req.Host = host
+				res, e := client.Do(req)
+				if e != nil {
+					t.Error(e)
+					return
+				}
+				defer res.Body.Close()
+				b, e := io.ReadAll(res.Body)
+				want := fmt.Sprintf("%d %s /wp-admin/?original=1", i, host)
+				if e != nil || string(b) != want {
+					t.Errorf("%s: got %q want %q (%v)", host, b, want, e)
+				}
+			}(i, j, r)
+		}
+	}
+	wg.Wait()
+	t.Logf("50 concurrent DNS+HTTP requests completed in %s (diagnostic only)", time.Since(start))
 }

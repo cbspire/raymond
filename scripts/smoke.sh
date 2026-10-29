@@ -18,6 +18,16 @@ trap cleanup EXIT
 sudo python3 "$root/scripts/smoke_backend.py" &
 backend=$!
 tmp=$(mktemp -d)
+sudo python3 - "$tmp/before.json" <<'PYHASH'
+import os,sys,json,hashlib
+paths={}
+for root in ['/etc/resolver','/etc/systemd/network','/etc/systemd/resolved.conf.d','/etc/systemd/system/raymond.service.d']:
+ for parent,dirs,files in os.walk(root):
+  for name in files:
+   p=os.path.join(parent,name)
+   if os.path.isfile(p):paths[p]=hashlib.sha256(open(p,'rb').read()).hexdigest()
+json.dump(paths,open(sys.argv[1],'w'))
+PYHASH
 python3 - "$tmp/config.yaml" <<'PY'
 import sys
 with open(sys.argv[1],'w') as f:
@@ -57,4 +67,9 @@ case "$(uname -s)" in
  Linux) test ! -e /etc/systemd/network/80-raymond.network; test ! -e /etc/systemd/network/80-raymond.netdev; test ! -e /etc/systemd/system/raymond.service; ! ip link show raymond0 >/dev/null 2>&1;;
 esac
 test ! -e /var/lib/raymond/state.json
+sudo python3 - "$tmp/before.json" <<'PYHASH'
+import sys,json,hashlib
+for p,digest in json.load(open(sys.argv[1])).items():
+ assert hashlib.sha256(open(p,'rb').read()).hexdigest()==digest, 'Unrelated resource changed: '+p
+PYHASH
 echo 'Privileged lifecycle and cleanup checks passed'

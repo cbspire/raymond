@@ -33,6 +33,11 @@ type Config struct {
 
 // Normalize uses ASCII DNS labels; Unicode must be supplied as explicit punycode.
 func Normalize(s string) (string, error) {
+	for _, b := range []byte(s) {
+		if b >= 128 {
+			return "", fmt.Errorf("hostname must use ASCII DNS labels")
+		}
+	}
 	s = strings.ToLower(strings.TrimSuffix(s, "."))
 	if len(s) == 0 || len(s) > 253 {
 		return "", fmt.Errorf("invalid hostname length")
@@ -77,7 +82,7 @@ func address(s string) (netip.Addr, error) {
 		return netip.Addr{}, e
 	}
 	n, e := strconv.Atoi(p)
-	if e != nil || n < 1 || n > 65535 {
+	if e != nil || n < 1 || n > 65535 || p != strconv.Itoa(n) {
 		return netip.Addr{}, fmt.Errorf("invalid port")
 	}
 	a, e := netip.ParseAddr(h)

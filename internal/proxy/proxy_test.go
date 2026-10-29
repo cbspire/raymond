@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/cbspire/raymond/internal/config"
 	"github.com/cbspire/raymond/internal/router"
+	"golang.org/x/net/websocket"
 	"io"
 	"net"
 	"net/http"
@@ -156,5 +157,40 @@ func TestConnectionReuse(t *testing.T) {
 	}
 	if a, b := <-addrs, <-addrs; a != b {
 		t.Fatalf("backend connections not reused: %s %s", a, b)
+	}
+}
+
+func TestWebSocketFrames(t *testing.T) {
+	_, p := setup(t, func(w http.ResponseWriter, r *http.Request) {
+		websocket.Handler(func(ws *websocket.Conn) {
+			defer ws.Close()
+			var payload string
+			if e := websocket.Message.Receive(ws, &payload); e != nil {
+				return
+			}
+			_ = websocket.Message.Send(ws, payload)
+		}).ServeHTTP(w, r)
+	})
+	cfg, e := websocket.NewConfig("ws://install.test/socket", "http://install.test")
+	if e != nil {
+		t.Fatal(e)
+	}
+	conn, e := net.DialTimeout("tcp", strings.TrimPrefix(p.URL, "http://"), time.Second)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	ws, e := websocket.NewClient(cfg, conn)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer ws.Close()
+	if e = websocket.Message.Send(ws, "WordPress agent stream"); e != nil {
+		t.Fatal(e)
+	}
+	var got string
+	if e = websocket.Message.Receive(ws, &got); e != nil || got != "WordPress agent stream" {
+		t.Fatal(got, e)
 	}
 }

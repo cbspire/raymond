@@ -1,8 +1,8 @@
 # Linux
 
-v0.1's integration targets distributions with **both systemd-resolved and systemd-networkd already active**. NetworkManager-only, non-systemd and container environments fail closed. Raymond never rewrites `/etc/resolv.conf` or global resolved settings.
+v0.1's integration targets distributions with **both systemd-resolved and systemd-networkd already active**. The existing `/etc/resolv.conf` must point to `/run/systemd/resolve/stub-resolv.conf`. NetworkManager-only, non-systemd and container environments fail closed. Raymond never rewrites `/etc/resolv.conf` or global resolved settings.
 
-A dedicated networkd dummy interface `raymond0` carries only route-only DNS domains, with `DNSDefaultRoute=no`. Native systemd-networkd configures resolved per-link; DNS points at `127.0.0.43:53`. Unrelated link DNS and systemd drop-ins remain untouched. An existing interface or configuration resource is a conflict. This integration must pass the privileged runner smoke test before a release; it has not been verified in the development container.
+A dedicated networkd dummy interface `raymond0` carries only route-only DNS domains, with `DNSDefaultRoute=no`. Native systemd-networkd configures resolved per-link; DNS points at `127.0.0.43:53`. Unrelated link DNS and systemd drop-ins remain untouched. An existing interface or configuration resource is a conflict. Installation waits for the dedicated interface and verifies the exact DNS server, route-only domains and disabled default routing through resolvectl; unexpected state retains the recovery journal and fails closed. This integration must pass the privileged runner smoke test before a release; it has not been verified in the development container.
 
 Review the binary and example YAML. Explicit administrator commands:
 

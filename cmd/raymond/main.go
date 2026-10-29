@@ -86,6 +86,9 @@ func run(args []string) error {
 		if e = diagnostics.Check(c); e != nil {
 			return e
 		}
+		if e = install.PlatformCheck(); e != nil {
+			return e
+		}
 		fmt.Println("Loopback TCP/UDP bind checks passed. This does not validate OS split DNS. If ports are privileged, run doctor explicitly with sudo.")
 		return nil
 	case "install":
