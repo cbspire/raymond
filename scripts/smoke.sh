@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 if [ "${RAYMOND_PRIVILEGED_SMOKE:-}" != 1 ]; then echo 'Set RAYMOND_PRIVILEGED_SMOKE=1 only on a reviewed disposable runner' >&2; exit 1; fi
 sudo -n true
-sudo mkdir -p /opt/raymond-smoke
+sudo install -d -o root -m 755 /opt/raymond-smoke
 sudo install -o root -m 755 "$root/bin/raymond" /opt/raymond-smoke/raymond
 cleanup() {
   sudo /opt/raymond-smoke/raymond uninstall || true

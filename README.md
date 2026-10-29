@@ -82,7 +82,7 @@ NetworkManager-only, non-systemd and container setups are unsupported for automa
 The following explicit commands copy your reviewed binary into a root-owned bootstrap directory, install Raymond-owned resources, check binds, and start the service. They change OS DNS/service configuration; **use a disposable system for candidate evaluation**.
 
 ```sh
-sudo mkdir -p /opt/raymond-bootstrap
+sudo install -d -o root -m 755 /opt/raymond-bootstrap
 sudo install -o root -m 755 bin/raymond /opt/raymond-bootstrap/raymond
 sudo /opt/raymond-bootstrap/raymond install --config "$PWD/raymond.yaml"
 sudo /opt/raymond-bootstrap/raymond doctor
