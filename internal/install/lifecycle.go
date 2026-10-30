@@ -142,7 +142,9 @@ func installLocked(path string) error {
 	}
 	return installSourceLocked(path, exe)
 }
-func installSourceLocked(path, exe string) error {
+func installSourceLocked(path, exe string) error { return installSourceMode(path, exe, false) }
+
+func installSourceMode(path, exe string, replaceBinary bool) error {
 	c, e := config.Load(path)
 	if e != nil {
 		return e
@@ -238,7 +240,7 @@ func installSourceLocked(path, exe string) error {
 			return e
 		}
 	}
-	if e = Apply(statePath, files, created); e != nil {
+	if e = applyResources(statePath, files, created, replaceBinary); e != nil {
 		return e
 	}
 	fail := func(e error) error {
@@ -276,6 +278,26 @@ func EnsureAliases() error {
 	}
 	if e := root(); e != nil {
 		return e
+	}
+	// A service child started by a lifecycle worker must not try to reacquire
+	// its parent's lock when the parent has already installed all owned aliases.
+	state, e := Installed()
+	if e != nil {
+		return e
+	}
+	assigned, e := aliases()
+	if e != nil {
+		return e
+	}
+	missing := false
+	for _, alias := range state.Aliases {
+		if alias != "127.0.0.42" && alias != "127.0.0.43" {
+			return fmt.Errorf("invalid alias journal")
+		}
+		missing = missing || !assigned[alias]
+	}
+	if !missing {
+		return nil
 	}
 	unlock, e := lifecycleLock()
 	if e != nil {
@@ -381,6 +403,9 @@ func controlLocked(action string) error {
 	case "stop":
 		return native("launchctl", "bootout", "system/dev.raymond")
 	case "restart":
+		if e := ensureAliasesLocked(); e != nil {
+			return e
+		}
 		return native("launchctl", "kickstart", "-k", "system/dev.raymond")
 	case "status":
 		return native("launchctl", "print", "system/dev.raymond")
@@ -404,7 +429,9 @@ func Uninstall() error {
 	}
 	return uninstallLocked()
 }
-func uninstallLocked() error {
+func uninstallLocked() error { return uninstallMode(false) }
+
+func uninstallMode(preserveBinary bool) error {
 	s, e := ReadState(statePath)
 	if os.IsNotExist(e) {
 		return nil
@@ -467,7 +494,16 @@ func uninstallLocked() error {
 			}
 		}
 	}
-	if e = Remove("", s); e != nil {
+	removing := s
+	if preserveBinary {
+		removing.Files = nil
+		for _, record := range s.Files {
+			if record.Path != binaryPath() {
+				removing.Files = append(removing.Files, record)
+			}
+		}
+	}
+	if e = Remove("", removing); e != nil {
 		return e
 	}
 	if runtime.GOOS == "linux" {

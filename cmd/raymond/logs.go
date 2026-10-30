@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/cbspire/raymond/internal/control"
 	"github.com/cbspire/raymond/internal/install"
 )
 
@@ -45,5 +46,12 @@ func logsCommand(args []string) error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	if os.Geteuid() != 0 {
+		if client, err := control.OwnerClient(); err == nil {
+			return managedLogs(ctx, client, options)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
 	return install.Logs(ctx, options)
 }

@@ -16,8 +16,9 @@ import (
 )
 
 type Client struct {
-	Token string
-	HTTP  *http.Client
+	Enrolled bool
+	Token    string
+	HTTP     *http.Client
 }
 
 func NewClient(socket, token string) *Client {
@@ -31,20 +32,31 @@ func OwnerClient() (*Client, error) {
 	if e != nil {
 		return nil, e
 	}
-	b, e := os.ReadFile(filepath.Join(filepath.Dir(p), "control.json"))
+	credential := filepath.Join(filepath.Dir(p), "control.json")
+	b, e := config.OwnedDocument(credential)
 	if e != nil {
 		return nil, e
 	}
+	st, e := os.Lstat(credential)
+	if e != nil {
+		return nil, e
+	}
+	if st.Mode().Perm()&0077 != 0 {
+		return nil, fmt.Errorf("owner credential must be private")
+	}
 	var access struct {
 		Token string `json:"token"`
+		Ready bool   `json:"ready"`
 	}
 	if e = json.Unmarshal(b, &access); e != nil {
 		return nil, e
 	}
-	if len(access.Token) < 32 {
+	if len(access.Token) < 26 {
 		return nil, fmt.Errorf("invalid management credential; run raymond setup")
 	}
-	return NewClient(SocketPath, access.Token), nil
+	client := NewClient(SocketPath, access.Token)
+	client.Enrolled = access.Ready
+	return client, nil
 }
 func ProxyClient() (*Client, error) {
 	p := filepath.Join(RootDir, "proxy-token")

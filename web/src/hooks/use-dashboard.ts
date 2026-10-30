@@ -13,7 +13,9 @@ export function useDashboard() {
   const running = useRef(false);
   const connected = useRef(false);
   const dirty =
-    !!state && JSON.stringify(draft) !== JSON.stringify(state.saved.config);
+    !!state &&
+    !!draft &&
+    JSON.stringify(draft) !== JSON.stringify(state.saved.config);
   useEffect(() => {
     const controller = new AbortController();
     lifetime.current = controller;
@@ -37,9 +39,52 @@ export function useDashboard() {
         if (!next.saved?.config || !next.active?.config)
           throw new Error("Raymond returned an incomplete state.");
         setState((prev) => prev ?? next);
-        setDraft((prev) => prev ?? structuredClone(next.saved.config));
+        setDraft(
+          (prev) =>
+            prev ??
+            (next.saved.error ? undefined : structuredClone(next.saved.config)),
+        );
+        if (next.saved.error)
+          setNotice("Saved configuration: " + next.saved.error);
+        else if (next.active.error)
+          setNotice("Active configuration: " + next.active.error);
         setOnline(true);
         connected.current = true;
+        if (
+          next.operation &&
+          ["queued", "running"].includes(next.operation.status)
+        ) {
+          running.current = true;
+          setBusy(true);
+          try {
+            const completed = await monitorOperation(
+              next.operation,
+              controller.signal,
+              setNotice,
+              () => setOnline(false),
+            );
+            if (completed.status !== "succeeded")
+              throw new Error(completed.error || "The operation failed.");
+            const current = await api<State>(
+              "state",
+              undefined,
+              "",
+              controller.signal,
+            );
+            setState(current);
+            setDraft(
+              current.saved.error
+                ? undefined
+                : structuredClone(current.saved.config),
+            );
+            setNotice("Operation completed.");
+            setOnline(true);
+            connected.current = true;
+          } finally {
+            running.current = false;
+            setBusy(false);
+          }
+        }
       } catch (error) {
         if (!controller.signal.aborted) {
           setOnline(false);
@@ -90,28 +135,9 @@ export function useDashboard() {
           csrf.current,
           signal,
         );
-        const deadline = Date.now() + 300000;
-        while (["queued", "running"].includes(op.status)) {
-          if (Date.now() > deadline)
-            throw new Error(
-              "This operation is still pending. Reconnect to check its status.",
-            );
-          setNotice(
-            op.phase || "Applying changes. Raymond may briefly reconnect…",
-          );
-          await new Promise((r) => setTimeout(r, 750));
-          if (signal?.aborted) return;
-          try {
-            op = await api<Operation>(
-              "operations/" + encodeURIComponent(op.id),
-              undefined,
-              "",
-              signal,
-            );
-          } catch {
-            setOnline(false);
-          }
-        }
+        op = await monitorOperation(op, signal, setNotice, () =>
+          setOnline(false),
+        );
         if (op.status !== "succeeded")
           throw new Error(
             op.error ||
@@ -127,7 +153,9 @@ export function useDashboard() {
         }
         const next = await api<State>("state", undefined, "", signal);
         setState(next);
-        setDraft(structuredClone(next.saved.config));
+        setDraft(
+          next.saved.error ? undefined : structuredClone(next.saved.config),
+        );
         setOnline(true);
         connected.current = true;
         if (op.result !== undefined) setResult(op.result);
@@ -176,3 +204,32 @@ export function useDashboard() {
   };
 }
 export type Dashboard = ReturnType<typeof useDashboard>;
+
+async function monitorOperation(
+  op: Operation,
+  signal: AbortSignal | undefined,
+  progress: (message: string) => void,
+  disconnected: () => void,
+): Promise<Operation> {
+  const deadline = Date.now() + 15 * 60 * 1000;
+  while (["queued", "running"].includes(op.status)) {
+    if (Date.now() > deadline)
+      throw new Error(
+        "This operation is still pending. Reconnect to check its status.",
+      );
+    progress(op.phase || "Applying changes. Raymond may briefly reconnect…");
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    try {
+      op = await api<Operation>(
+        "operations/" + encodeURIComponent(op.id),
+        undefined,
+        "",
+        signal,
+      );
+    } catch {
+      disconnected();
+    }
+  }
+  return op;
+}

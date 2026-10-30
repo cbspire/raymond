@@ -37,22 +37,22 @@ const server = http.createServer((req,res) => {
  const errors = [];
  page.on('pageerror',error => errors.push(error.message));
  let config = {version:1,dns:{zones:['test','localhost'],listen:'127.0.0.2:53'},proxy:{listen:'127.0.0.3:80'},routes:[{domain:'studio.test',target:'127.0.0.1:3000'},{domain:'api.test',target:'127.0.0.1:8080'},{domain:'docs.test',target:'127.0.0.1:4321'},{domain:'*.sites.test',target:'127.0.0.1:8025'}]};
- let revision = 'a'.repeat(64), operations = [], conflict = false, disconnected = false, pending = false;
+ let revision = 'a'.repeat(64), operations = [], conflict = false, disconnected = false, pending = false, recoveryOperation, invalidSaved=false;
  await page.route('**/api/v1/**',async route => {
   const request = route.request(), endpoint = new URL(request.url()).pathname.slice(8);
   let data, status = 200;
   if (disconnected) { await route.fulfill({status:503,json:{error:'Management unavailable.'}}); return; }
   if (endpoint === 'session') data = {csrf:'test-csrf'};
-  else if (endpoint === 'state') data = {version:'0.1.2-preview',platform:'linux/amd64',running:true,saved:{config,revision},active:{config,revision},pending};
+  else if (endpoint === 'state') data = {version:'0.1.2-preview',platform:'linux/amd64',running:true,saved:{config:invalidSaved?{version:0,dns:{zones:null,listen:""},proxy:{listen:""},routes:null}:config,revision,error:invalidSaved?"Invalid YAML":undefined},active:{config,revision},pending:pending||invalidSaved,operation:recoveryOperation};
   else if (endpoint === 'operations' && request.method() === 'POST') {
    assert.equal(request.headers()['x-raymond-csrf'],'test-csrf');
-   const body = request.postDataJSON(); operations.push(body);
+   const body = request.postDataJSON(); operations.push(body);if(body.action==='discard'){invalidSaved=false;pending=false;}
    if (body.action === 'save') {
     if (conflict || body.revision !== revision) { status = 409; data = {error:'Configuration changed externally; reload before saving.'}; }
     else { config = body.config; revision = 'b'.repeat(64); }
    }
    if (!data) data = {id:'fixture-operation',action:body.action,status:'queued'};
-  } else if (endpoint.startsWith('operations/')) data = {id:'fixture-operation',status:'succeeded',result:{service:'healthy',config:'valid'}};
+  } else if (endpoint.startsWith('operations/')) {recoveryOperation=undefined;data = {id:'fixture-operation',status:'succeeded',result:{service:'healthy',config:'valid'}};}
   else if (endpoint === 'logs') { await route.continue(); return; }
   else { status = 404; data = {error:'Unknown fixture endpoint'}; }
   await route.fulfill({status,json:data});
@@ -152,6 +152,10 @@ const server = http.createServer((req,res) => {
  await page.getByRole('button',{name:'Add service',exact:true}).click();
  assert.equal(await page.getByLabel('Domain',{exact:true}).evaluate(el => el === document.activeElement),true);
  await page.keyboard.press('Escape');
+ const beforeRecovery=operations.length;recoveryOperation={id:'recovery-fixture',status:'running',phase:'Recovering native operation'};
+ await page.reload();await page.getByText('Operation completed.',{exact:true}).waitFor();assert.equal(operations.length,beforeRecovery,'reconnect must monitor, not resubmit native work');
+ invalidSaved=true;await page.reload();await page.getByText('Saved configuration: Invalid YAML',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Add service',exact:true}).isEnabled(),false);
+ await page.getByRole('button',{name:'Discard saved changes',exact:true}).click();await page.getByRole('button',{name:'Continue',exact:true}).click();await page.getByText('Operation completed.',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Add service',exact:true}).isEnabled(),true);
  pending = true; await page.reload(); await page.getByText('Saved changes are waiting to be applied.').waitFor();
  disconnected = true; await page.reload(); await page.getByText(/Management unavailable/).waitFor();
  assert.equal(await page.locator('#stop').isEnabled(),false);

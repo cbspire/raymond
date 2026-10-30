@@ -102,11 +102,13 @@ export function Services({
       <div id="service-list">
         {!filtered.length && (
           <div className="empty">
-            {!d.state
-              ? "Connect to Raymond to see your services."
-              : search
-                ? "No services match your search."
-                : "A fresh workspace. Add your first local service to get started."}
+            {d.state?.saved.error
+              ? "Repair the saved configuration or discard pending changes to restore the active configuration."
+              : !d.state
+                ? "Connect to Raymond to see your services."
+                : search
+                  ? "No services match your search."
+                  : "A fresh workspace. Add your first local service to get started."}
           </div>
         )}
         {filtered.map((route) => (

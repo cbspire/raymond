@@ -65,6 +65,16 @@ func OwnedDocument(path string) ([]byte, error) {
 	return b, nil
 }
 func SaveOwned(path, expected string, c Config) (string, error) {
+	return saveOwned(path, expected, c, false)
+}
+
+// DiscardOwned is an explicit CAS restoration of the confirmed active config.
+// Invalid external YAML has no parseable comments to merge.
+func DiscardOwned(path, expected string, c Config) (string, error) {
+	return saveOwned(path, expected, c, true)
+}
+
+func saveOwned(path, expected string, c Config, discard bool) (string, error) {
 	if e := c.Validate(); e != nil {
 		return "", e
 	}
@@ -78,6 +88,17 @@ func SaveOwned(path, expected string, c Config) (string, error) {
 		return "", e
 	}
 	defer lock.Close()
+	lockInfo, e := lock.Stat()
+	if e != nil {
+		return "", e
+	}
+	var lockStat unix.Stat_t
+	if e = unix.Fstat(int(lock.Fd()), &lockStat); e != nil {
+		return "", e
+	}
+	if !lockInfo.Mode().IsRegular() || int(lockStat.Uid) != os.Geteuid() || lockInfo.Mode().Perm()&0077 != 0 || lockStat.Nlink != 1 {
+		return "", fmt.Errorf("configuration edit lock must be private and owned")
+	}
 	if e = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); e != nil {
 		return "", fmt.Errorf("another configuration edit is active")
 	}
@@ -89,6 +110,9 @@ func SaveOwned(path, expected string, c Config) (string, error) {
 		return "", fmt.Errorf("configuration changed externally; reload before saving")
 	}
 	b, e := WithComments(old, c)
+	if e != nil && discard {
+		b, e = yaml.Marshal(c)
+	}
 	if e != nil {
 		return "", e
 	}

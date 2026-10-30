@@ -367,3 +367,59 @@ func (j *Operations) Finish(id string, result json.RawMessage, failure error) er
 		return nil
 	})
 }
+
+// SnapshotOperations reads an atomically published snapshot without taking the
+// worker lock. API readers must remain available while a detached worker runs.
+func SnapshotOperations(dir string) (*Operations, error) {
+	j := &Operations{path: filepath.Join(dir, "operations.json"), data: operationData{Version: 1}}
+	if e := j.load(); e != nil {
+		return nil, e
+	}
+	return j, nil
+}
+
+// WorkerLock duplicates the open file description, retaining its flock across
+// exec through ExtraFiles. Closing the broker's descriptors cannot unlock a live worker.
+func (j *Operations) WorkerLock() (*os.File, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.lock == nil || j.failure != nil {
+		return nil, fmt.Errorf("journal unavailable")
+	}
+	fd, e := unix.Dup(int(j.lock.Fd()))
+	if e != nil {
+		return nil, e
+	}
+	unix.CloseOnExec(fd)
+	return os.NewFile(uintptr(fd), "operations.lock"), nil
+}
+
+func AdoptOperations(dir string, f *os.File) (*Operations, error) {
+	expected, e := privateFile(filepath.Join(dir, "operations.lock"), unix.O_RDWR)
+	if e != nil {
+		return nil, e
+	}
+	defer expected.Close()
+	a, e := f.Stat()
+	if e != nil {
+		return nil, e
+	}
+	b, e := expected.Stat()
+	if e != nil {
+		return nil, e
+	}
+	if !os.SameFile(a, b) {
+		return nil, fmt.Errorf("invalid inherited operation lock")
+	}
+	// ExtraFiles deliberately clears CLOEXEC for the worker handoff. Restore it
+	// before spawning any dropped-UID helper or native tool.
+	unix.CloseOnExec(int(f.Fd()))
+	if e = unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); e != nil {
+		return nil, e
+	}
+	j := &Operations{path: filepath.Join(dir, "operations.json"), lock: f, data: operationData{Version: 1}}
+	if e = j.load(); e != nil {
+		return nil, e
+	}
+	return j, nil
+}

@@ -51,6 +51,10 @@ func logCommand(platform string, options LogOptions) (string, []string, error) {
 // Logs streams the installed service's fixed log destination. It deliberately
 // avoids the short lifecycle-command timeout because following is long-lived.
 func Logs(ctx context.Context, options LogOptions) error {
+	return StreamLogs(ctx, options, os.Stdout, os.Stderr)
+}
+
+func StreamLogs(ctx context.Context, options LogOptions, stdout, stderr io.Writer) error {
 	name, args, e := logCommand(runtime.GOOS, options)
 	if e != nil {
 		return e
@@ -69,7 +73,7 @@ func Logs(ctx context.Context, options LogOptions) error {
 			return fmt.Errorf("service log must be a regular file")
 		}
 	}
-	return streamLogs(ctx, name, args, os.Stdout, os.Stderr)
+	return streamLogs(ctx, name, args, stdout, stderr)
 }
 
 func streamLogs(ctx context.Context, name string, args []string, stdout, stderr io.Writer) error {

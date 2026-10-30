@@ -14,6 +14,8 @@ export interface ConfigView {
   error?: string;
 }
 export interface State {
+  operation?: Operation;
+  enrolled?: boolean;
   version: string;
   platform: string;
   running: boolean;

@@ -33,7 +33,7 @@ func Run(ctx context.Context, c config.Config) error {
 	defer udp.Close()
 	h := rdns.New(c)
 	ds := []*mdns.Server{{Listener: tcp, Handler: h, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second}, {PacketConn: udp, Handler: h, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, UDPSize: 1232}}
-	s := &http.Server{Handler: proxy.New(router.New(c.Routes)), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 1 << 20}
+	s := &http.Server{Handler: proxy.New(router.New(c.Routes)), BaseContext: func(net.Listener) context.Context { return ctx }, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 1 << 20}
 	done := make(chan error, 3)
 	go func() { done <- s.Serve(l) }()
 	for _, d := range ds {

@@ -45,3 +45,27 @@ func TestOwnedEditPreservesCommentsAndRejectsStaleWrites(t *testing.T) {
 		t.Fatal("followed config symlink")
 	}
 }
+
+func TestDiscardInvalidOwnedConfigRequiresCurrentRevision(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	invalid := []byte("version: [broken yaml\n")
+	if e := os.WriteFile(path, invalid, 0600); e != nil {
+		t.Fatal(e)
+	}
+	active := Config{Version: 1, DNS: DNS{Zones: []string{"test"}}}
+	if e := active.Validate(); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := SaveOwned(path, Revision(invalid), active); e == nil {
+		t.Fatal("ordinary save discarded invalid YAML implicitly")
+	}
+	if _, e := DiscardOwned(path, strings.Repeat("0", 64), active); e == nil {
+		t.Fatal("discard ignored external revision")
+	}
+	if _, e := DiscardOwned(path, Revision(invalid), active); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := Load(path); e != nil {
+		t.Fatal("discard did not restore valid config", e)
+	}
+}

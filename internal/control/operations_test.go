@@ -383,3 +383,52 @@ func TestOperationsRejectUnsafeFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestInheritedWorkerLockAndSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	broker, e := OpenOperations(dir)
+	if e != nil {
+		t.Fatal(e)
+	}
+	op, e := broker.Enqueue(Request{Action: "restart"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	fd, e := broker.WorkerLock()
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer fd.Close()
+	if e = broker.Close(); e != nil {
+		t.Fatal(e)
+	}
+	if another, e := OpenOperations(dir); e == nil {
+		another.Close()
+		t.Fatal("broker close released inherited lock")
+	}
+	worker, e := AdoptOperations(dir, fd)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = worker.Start(op.ID); e != nil {
+		t.Fatal(e)
+	}
+	snapshot, e := SnapshotOperations(dir)
+	if e != nil || snapshot.Active() == nil || snapshot.Active().Status != "running" {
+		t.Fatal("API cannot read live worker", e)
+	}
+	if e = worker.Finish(op.ID, nil, nil); e != nil {
+		t.Fatal(e)
+	}
+	if e = worker.Close(); e != nil {
+		t.Fatal(e)
+	}
+	next, e := OpenOperations(dir)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer next.Close()
+	if next.Active() != nil {
+		t.Fatal("terminal work remains active")
+	}
+}

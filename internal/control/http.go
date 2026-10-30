@@ -41,7 +41,11 @@ func Handler(b Backend, a *Auth, owner, proxy string) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
-		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		token, scheme := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !scheme || len(r.Header.Values("Authorization")) != 1 {
+			Failure(w, &Error{401, "management credential required"})
+			return
+		}
 		isOwner := Equal(token, owner)
 		if !isOwner && !Equal(token, proxy) {
 			Failure(w, &Error{401, "management credential required"})
@@ -64,6 +68,10 @@ func Handler(b Backend, a *Auth, owner, proxy string) http.Handler {
 				Failure(w, &Error{403, "dashboard origin required"})
 				return
 			}
+		}
+		if r.URL.RawQuery != "" && r.URL.Path != Prefix+"logs" {
+			Failure(w, &Error{400, "unknown management query"})
+			return
 		}
 		if r.URL.Path == Prefix+"launch" {
 			if !isOwner || r.Method != "POST" {

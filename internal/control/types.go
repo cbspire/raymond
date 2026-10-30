@@ -12,7 +12,6 @@ import (
 )
 
 const RootDir = "/var/lib/raymond/management"
-const SocketDir = "/var/run/raymond-control"
 const SocketPath = SocketDir + "/control.sock"
 const Prefix = "/api/v1/"
 const Origin = "http://raymond.test"
@@ -33,13 +32,15 @@ type ConfigView struct {
 	Error    string        `json:"error,omitempty"`
 }
 type State struct {
-	Version   string     `json:"version"`
-	Platform  string     `json:"platform"`
-	Running   bool       `json:"running"`
-	Saved     ConfigView `json:"saved"`
-	Active    ConfigView `json:"active"`
-	Pending   bool       `json:"pending"`
-	Operation *Operation `json:"operation,omitempty"`
+	Enrolled   bool       `json:"enrolled"`
+	ConfigPath string     `json:"config_path,omitempty"`
+	Version    string     `json:"version"`
+	Platform   string     `json:"platform"`
+	Running    bool       `json:"running"`
+	Saved      ConfigView `json:"saved"`
+	Active     ConfigView `json:"active"`
+	Pending    bool       `json:"pending"`
+	Operation  *Operation `json:"operation,omitempty"`
 }
 type Request struct {
 	Action   string         `json:"action"`
