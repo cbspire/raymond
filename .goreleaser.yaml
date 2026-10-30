@@ -1,7 +1,7 @@
 version: 2
 project_name: raymond
 snapshot:
-  version_template: '0.1.0-rc.g{{ .ShortCommit }}'
+  version_template: '0.1.1-rc.g{{ .ShortCommit }}'
 builds:
   - id: raymond
     main: ./cmd/raymond

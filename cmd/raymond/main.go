@@ -64,7 +64,7 @@ func installCommand(args []string) error {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: raymond version|config|doctor|install|start|stop|restart|status|logs|uninstall|serve")
+		return fmt.Errorf("usage: raymond version|config|doctor|install|setup|upgrade|start|stop|restart|status|logs|uninstall|serve")
 	}
 	switch args[0] {
 	case "_init-user-config":
@@ -136,6 +136,10 @@ func run(args []string) error {
 		return nil
 	case "install":
 		return installCommand(args[1:])
+	case "setup":
+		return setupCommand(args[1:])
+	case "upgrade", "update":
+		return upgradeCommand(args[1:])
 	case "logs":
 		return logsCommand(args[1:])
 	case "start", "stop", "restart", "status":

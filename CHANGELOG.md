@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 — 2026-10-30
+
+- Add one-command installation with verified downloads, automatic configuration, administrator-assisted service setup and shell PATH setup.
+- Add `raymond upgrade` (`update` alias) and version pinning.
+- Add `raymond setup` for service updates with previous binary/config recovery.
+- Preserve binary-only and offline archive installation.
+
 ## 0.1.0 — 2026-10-30
 
 - Publish releases with plain semantic-version tags and support prefixed or unprefixed versions in the binary installer.

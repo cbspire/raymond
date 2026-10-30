@@ -20,7 +20,7 @@ You are the implementation engineer for a new open-source Go repository named `r
 6. Supports multiple private DNS zones (`test`, `internal`, etc.) with arbitrarily nested hostnames. `.local` must be disabled or warned against by default because it collides with mDNS/Bonjour.
 7. Routes hostnames by the longest matching suffix, with one configurable backend IP and port per route. Preserve `Host` and the original URL/path/query.
 8. In v0.1, terminate **HTTP only**. No HTTPS, certificate authority, compression, caching, rewriting, custom rules, dashboard, Docker requirement, external DNS or remote-control HTTP API.
-9. Fully offline at runtime. `curl` is required only by the remote installer; Raymond itself performs no outbound network requests.
+9. Fully offline at runtime. `curl` is required only by the remote installer; DNS/HTTP serving performs no external network requests; explicit upgrade commands retrieve releases.
 10. Installer must be safe, reproducible, idempotent, and reversible. Do not silently overwrite other developers' resolver files or networking settings.
 
 ## 2. User experience / concrete behavior
@@ -322,7 +322,7 @@ raymond doctor
 raymond start
 ```
 
-The remote script must **only install the binary**; it must not silently run `sudo`, alter DNS settings, install system services or execute Raymond as root. For higher-assurance use, document a two-step download/inspection path as the preferred alternative to piping remote code into a shell.
+The remote script installs a verified binary as the ordinary user, then announces and requests administrator access for native setup. It initializes user config, configures and starts the service, and makes the CLI available in future terminals. `RAYMOND_BINARY_ONLY=1` skips setup and shell changes. Both the one-command install and a download/inspection path are documented. `raymond upgrade` uses an immutable release installer and preserves configuration.
 
 Installer acceptance:
 

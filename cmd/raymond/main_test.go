@@ -9,7 +9,7 @@ import (
 )
 
 func TestInvalidArguments(t *testing.T) {
-	for _, args := range [][]string{nil, {"unknown"}, {"version", "extra"}, {"config"}, {"config", "validate", "--bad", "file"}, {"serve", "--config"}, {"start", "extra"}, {"uninstall", "extra"}} {
+	for _, args := range [][]string{nil, {"unknown"}, {"version", "extra"}, {"config"}, {"config", "validate", "--bad", "file"}, {"serve", "--config"}, {"start", "extra"}, {"uninstall", "extra"}, {"setup", "--bad"}, {"upgrade", "extra"}, {"update", "--version", "main"}} {
 		if e := run(args); e == nil {
 			t.Errorf("accepted %v", args)
 		}

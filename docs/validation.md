@@ -1,5 +1,7 @@
 # v0.1 acceptance evidence
 
+0.1.1 adds native setup/update checks for running-service replacement, failed-update recovery and fresh setup. Installer fixtures also cover full setup, idempotent shell PATH edits, failed setup restoration, and binary-only/offline mode.
+
 Release `0.1.0` uses the native acceptance and publication checks described below. All product artifacts contain one native executable plus README/LICENSE. The DNS server and HTTP proxy are built into that executable.
 
 ## Native M4–M6 acceptance
