@@ -14,6 +14,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Verify embedded dashboard assets
+        run: |
+          npm ci --prefix web
+          npm run check --prefix web
+          npm run build --prefix web
+          git diff --exit-code -- internal/proxy/web
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod

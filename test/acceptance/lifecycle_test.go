@@ -455,7 +455,7 @@ func TestInstalledLifecycle(t *testing.T) {
 		if e != nil {
 			return e
 		}
-		if response.StatusCode != http.StatusOK || !strings.Contains(string(body), "At your service.") {
+		if response.StatusCode != http.StatusOK || !strings.Contains(string(body), `id="root"`) {
 			return fmt.Errorf("dashboard response: HTTP %d", response.StatusCode)
 		}
 		return nil

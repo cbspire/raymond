@@ -4,8 +4,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
+const {randomBytes} = require('node:crypto');
 const path = require('node:path');
-const root = path.resolve(__dirname, '../../internal/proxy');
+const root = path.resolve(__dirname, '../../internal/proxy/web');
 const output = process.env.SCREENSHOT_DIR || '/tmp/raymond-dashboard-screenshots';
 fs.mkdirSync(output, {recursive:true});
 let logsConnections = 0;
@@ -17,11 +18,12 @@ const server = http.createServer((req,res) => {
   let count = 0; const timer = setInterval(() => res.write(`time=2026-10-30T18:00:00Z level=INFO msg=request method=GET host=api.test path=/health status=200 sequence=${++count}\n`),300);
   req.on('close',() => clearInterval(timer)); return;
  }
- const filename = {'/theme.js':'theme.js','/':'dashboard.html','/dashboard.js':'dashboard.js','/dashboard.css':'dashboard.css'}[req.url];
+ const filename = {'/theme.js':'theme.js','/':'index.html','/dashboard.js':'dashboard.js','/dashboard.css':'dashboard.css'}[req.url];
  if (!filename) { res.writeHead(404); res.end(); return; }
  res.setHeader('Content-Type', filename.endsWith('.js') ? 'text/javascript' : filename.endsWith('.css') ? 'text/css' : 'text/html');
- res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
- res.end(fs.readFileSync(path.join(root, filename)));
+ const nonce = randomBytes(16).toString('base64');
+ res.setHeader('Content-Security-Policy', `default-src 'none'; style-src 'self' 'nonce-${nonce}'; script-src 'self'; connect-src 'self'; img-src data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`);
+ res.end(fs.readFileSync(path.join(root, filename),'utf8').replaceAll('__RAYMOND_CSP_NONCE__',nonce));
 });
 (async () => {
  await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
@@ -30,6 +32,8 @@ const server = http.createServer((req,res) => {
  try {
  const context = await browser.newContext({viewport:{width:1440,height:1000}});
  const page = await context.newPage();
+ const cspViolations = []; await page.exposeFunction('reportCSP',directive => cspViolations.push(directive));
+ await page.addInitScript(() => document.addEventListener('securitypolicyviolation', event => window.reportCSP(event.violatedDirective)));
  const errors = [];
  page.on('pageerror',error => errors.push(error.message));
  let config = {version:1,dns:{zones:['test','localhost'],listen:'127.0.0.2:53'},proxy:{listen:'127.0.0.3:80'},routes:[{domain:'studio.test',target:'127.0.0.1:3000'},{domain:'api.test',target:'127.0.0.1:8080'},{domain:'docs.test',target:'127.0.0.1:4321'},{domain:'*.sites.test',target:'127.0.0.1:8025'}]};
@@ -56,7 +60,7 @@ const server = http.createServer((req,res) => {
  await page.goto(origin);
  await page.getByText('Connected locally',{exact:true}).waitFor();
  await page.screenshot({path:path.join(output,'dashboard-desktop.png'),fullPage:true});
- await page.getByRole('button',{name:'+ Add service',exact:true}).click();
+ await page.getByRole('button',{name:'Add service',exact:true}).click();
  await page.getByLabel('Domain',{exact:true}).fill('preview.test');
  await page.getByLabel('Port',{exact:true}).fill('5173');
  await page.screenshot({path:path.join(output,'dashboard-add-service.png'),fullPage:true});
@@ -66,7 +70,7 @@ const server = http.createServer((req,res) => {
  await page.getByRole('button',{name:'Save & Apply',exact:true}).click();
  await page.getByText('Your workspace is up to date. Changes saved and applied.',{exact:true}).waitFor();
  assert.equal(config.routes.length,5);
- await page.getByRole('button',{name:'+ Add service',exact:true}).click();
+ await page.getByRole('button',{name:'Add service',exact:true}).click();
  await page.getByLabel('Domain',{exact:true}).fill('*.preview.test');
  await page.getByRole('button',{name:'Keep in draft',exact:true}).click();
  await page.getByRole('link',{name:'*.preview.test ↗',exact:true}).waitFor();
@@ -112,7 +116,7 @@ const server = http.createServer((req,res) => {
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
  assert.ok(!operations.some(o => o.action === 'stop'),'cancel must not stop service');
  await page.getByRole('button',{name:/Services/,exact:false}).first().click();
- await page.getByRole('button',{name:'+ Add service',exact:true}).click();
+ await page.getByRole('button',{name:'Add service',exact:true}).click();
  await page.getByLabel('Domain',{exact:true}).fill('studio.test');
  await page.getByRole('button',{name:'Keep in draft',exact:true}).click();
  await page.getByText('This domain is already registered.').waitFor();
@@ -145,13 +149,14 @@ const server = http.createServer((req,res) => {
  await page.screenshot({path:path.join(output,'dashboard-logs-dark.png'),fullPage:true});
  await page.getByRole('button',{name:'Services',exact:true}).click();
  await page.getByRole('button',{name:'Toggle dark mode'}).click();
- await page.getByRole('button',{name:'+ Add service',exact:true}).click();
+ await page.getByRole('button',{name:'Add service',exact:true}).click();
  assert.equal(await page.getByLabel('Domain',{exact:true}).evaluate(el => el === document.activeElement),true);
  await page.keyboard.press('Escape');
  pending = true; await page.reload(); await page.getByText('Saved changes are waiting to be applied.').waitFor();
  disconnected = true; await page.reload(); await page.getByText(/Management unavailable/).waitFor();
  assert.equal(await page.locator('#stop').isEnabled(),false);
  await page.screenshot({path:path.join(output,'dashboard-disconnected.png'),fullPage:true});
+ assert.deepEqual(cspViolations,[],'dashboard must respect CSP');
  assert.deepEqual(errors,[]);
  console.log('PASS: wildcard service drafts, live streaming/append/pause/resume/cancellation, persisted dark mode, service CRUD, browser drafts, save/CSRF, search, settings, logs/filter/pause, diagnostics, stop cancellation, duplicate domains, stale saves, XSS, mobile overflow, focus, pending and disconnected states.');
  console.log('Screenshots: ' + output + ' (controlled API fixture; not native lifecycle acceptance)');

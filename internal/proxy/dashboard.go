@@ -1,22 +1,24 @@
 package proxy
 
 import (
+	"bytes"
+	"crypto/rand"
 	_ "embed"
 	"github.com/cbspire/raymond/internal/control"
 	"net/http"
 	"strings"
 )
 
-//go:embed dashboard.html
+//go:embed web/index.html
 var dashboardPage []byte
 
-//go:embed dashboard.css
+//go:embed web/dashboard.css
 var dashboardCSS []byte
 
-//go:embed dashboard.js
+//go:embed web/dashboard.js
 var dashboardJS []byte
 
-//go:embed theme.js
+//go:embed web/theme.js
 var dashboardTheme []byte
 
 func serveManagement(w http.ResponseWriter, r *http.Request, client *control.Client) {
@@ -54,7 +56,13 @@ func serveDashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+	styleSource := "'self'"
+	if r.URL.Path == "/" {
+		nonce := rand.Text()
+		content = bytes.ReplaceAll(content, []byte("__RAYMOND_CSP_NONCE__"), []byte(nonce))
+		styleSource += " 'nonce-" + nonce + "'"
+	}
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src "+styleSource+"; script-src 'self'; connect-src 'self'; img-src data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(content)
 	}

@@ -3,3 +3,5 @@
 /coverage.out
 
 /acceptance.log
+
+web/node_modules/

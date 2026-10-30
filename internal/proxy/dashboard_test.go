@@ -46,7 +46,7 @@ func TestDashboardPage(t *testing.T) {
 				if w.Body.Len() != 0 {
 					t.Fatal("HEAD returned a body")
 				}
-			} else if !strings.Contains(w.Body.String(), "Your local services") {
+			} else if !strings.Contains(w.Body.String(), `id="root"`) || !strings.Contains(w.Body.String(), "/dashboard.js") {
 				t.Fatal("missing dashboard page")
 			}
 		})
@@ -129,5 +129,24 @@ func TestDashboardForwardsOnlyWithProxyCredential(t *testing.T) {
 		if w.Body.String() != "application" {
 			t.Fatal("management intercepted app route", path)
 		}
+	}
+}
+
+func TestDashboardStyleNonce(t *testing.T) {
+	h := newWithControl(router.New(nil), nil)
+	previous := ""
+	for range 2 {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "http://raymond.test/", nil))
+		csp := w.Header().Get("Content-Security-Policy")
+		_, tail, ok := strings.Cut(csp, "'nonce-")
+		if !ok {
+			t.Fatal("missing style nonce", csp)
+		}
+		nonce, _, _ := strings.Cut(tail, "'")
+		if len(nonce) < 26 || nonce == previous || !strings.Contains(w.Body.String(), `content="`+nonce+`"`) || strings.Contains(csp, "unsafe-inline") || strings.Contains(w.Body.String(), "__RAYMOND_CSP_NONCE__") {
+			t.Fatal("invalid page nonce")
+		}
+		previous = nonce
 	}
 }

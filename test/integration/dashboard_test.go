@@ -65,7 +65,24 @@ func TestGeneratedConfigServesDashboard(t *testing.T) {
 	}
 	defer response.Body.Close()
 	body, e := io.ReadAll(response.Body)
-	if e != nil || response.StatusCode != 200 || !strings.Contains(string(body), "At your service.") {
+	if e != nil || response.StatusCode != 200 || !strings.Contains(string(body), `id="root"`) || !strings.Contains(string(body), "/dashboard.js") {
 		t.Fatalf("dashboard response: HTTP %d, %v, %s", response.StatusCode, e, body)
+	}
+
+	for _, asset := range []struct{ path, mime string }{{"/dashboard.js", "text/javascript"}, {"/dashboard.css", "text/css"}, {"/theme.js", "text/javascript"}} {
+		request, e := http.NewRequest("GET", "http://"+c.Proxy.Listen+asset.path, nil)
+		if e != nil {
+			t.Fatal(e)
+		}
+		request.Host = "raymond.test"
+		response, e := client.Do(request)
+		if e != nil {
+			t.Fatal(e)
+		}
+		payload, e := io.ReadAll(response.Body)
+		response.Body.Close()
+		if e != nil || response.StatusCode != http.StatusOK || len(payload) == 0 || !strings.HasPrefix(response.Header.Get("Content-Type"), asset.mime) {
+			t.Fatalf("dashboard asset %s failed", asset.path)
+		}
 	}
 }
