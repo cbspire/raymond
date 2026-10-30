@@ -425,16 +425,17 @@ func TestInstalledLifecycle(t *testing.T) {
 	localhost := a.serve(t, 80)
 	a.serve(t, 9001)
 	a.serve(t, 9002)
+	// Exercise the real user-owned download as the invoking sudo account.
+	must(t, nativePath("sudo"), "-H", "-u", os.Getenv("RAYMOND_TEST_USER"), "--", nativePath("sudo"), "-n", "--", nativePath("env"), "PATH="+os.Getenv("PATH"), src, "install", "--config", configPath)
 	must(t, binary, "install", "--config", configPath)
-	must(t, binary, "install", "--config", configPath)
-	must(t, binary, "doctor")
+	must(t, binary, "doctor", "--config", configPath)
 	// Prove a wildcard conflict is reported without terminating the listener.
 	_ = localhost.Close()
 	wild, e := net.Listen("tcp4", "0.0.0.0:80")
 	if e != nil {
 		t.Fatal(e)
 	}
-	if out, e := command(binary, "doctor"); e == nil {
+	if out, e := command(binary, "doctor", "--config", configPath); e == nil {
 		_ = wild.Close()
 		t.Fatalf("doctor accepted wildcard listener: %s", out)
 	}
@@ -444,6 +445,31 @@ func TestInstalledLifecycle(t *testing.T) {
 	httpClient := client()
 	defer httpClient.CloseIdleConnections()
 	eventually(t, "native DNS and HTTP", func() error { return fetch(httpClient, "first.install0.web.test", 0) })
+	eventually(t, "dashboard through native DNS", func() error {
+		response, e := httpClient.Get("http://raymond.test/")
+		if e != nil {
+			return e
+		}
+		defer response.Body.Close()
+		body, e := io.ReadAll(response.Body)
+		if e != nil {
+			return e
+		}
+		if response.StatusCode != http.StatusOK || !strings.Contains(string(body), "At your service.") {
+			return fmt.Errorf("dashboard response: HTTP %d", response.StatusCode)
+		}
+		return nil
+	})
+	eventually(t, "HTTP access records in native service logs", func() error {
+		output, e := command(binary, "logs", "--no-follow", "--lines", "50")
+		if e != nil {
+			return fmt.Errorf("read service logs: %w: %s", e, output)
+		}
+		if !strings.Contains(string(output), "host=first.install0.web.test") || !strings.Contains(string(output), "status=200") {
+			return fmt.Errorf("request event not available yet: %s", output)
+		}
+		return nil
+	})
 	must(t, binary, "status")
 	must(t, binary, "install", "--config", configPath)
 	a.reset()

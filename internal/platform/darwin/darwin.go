@@ -7,6 +7,7 @@ import (
 )
 
 const BinaryPath = "/Library/PrivilegedHelperTools/dev.raymond"
+const LogPath = "/var/log/raymond.log"
 
 const Marker = "# Raymond owned; do not edit\n"
 
@@ -17,8 +18,8 @@ func Files(c config.Config) map[string][]byte {
 <key>Label</key><string>dev.raymond</string>
 <key>ProgramArguments</key><array><string>/Library/PrivilegedHelperTools/dev.raymond</string><string>_service</string></array>
 <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
-<key>StandardOutPath</key><string>/var/log/raymond.log</string>
-<key>StandardErrorPath</key><string>/var/log/raymond.log</string>
+<key>StandardOutPath</key><string>` + LogPath + `</string>
+<key>StandardErrorPath</key><string>` + LogPath + `</string>
 </dict></plist>
 `)}
 	for _, z := range c.DNS.Zones {

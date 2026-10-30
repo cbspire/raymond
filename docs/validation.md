@@ -47,3 +47,9 @@ The **Privileged OS integration** workflow uploads candidate archives, checksums
 The owner still needs to review/merge the PR and authorize the release tag/publication. Repository branch/tag protections, environment approval rules, dependency/secret scanning and optional artifact signing/attestation are settings or release-policy actions, not automatically enabled by source files. The release workflow requires CI, security and native OS acceptance before its publication job. GitHub's `release` environment should be configured with the owner's approval policy before publishing.
 
 Linux integration currently requires already-active systemd-networkd/systemd-resolved and the resolved stub symlink. Other Linux resolver arrangements fail closed. macOS's installed daemon runs as root for privileged ports and alias reconstruction; privilege isolation remains future hardening. No HTTPS, certificates or trust-store changes are included in v0.1.
+
+## Local setup and dashboard changes
+
+The current PR extends native acceptance to initialize and preserve the ordinary user's private configuration, install directly from the invoking user's downloaded executable, serve the embedded dashboard through native DNS, and read HTTP access events through `raymond logs`. The historical run linked above covers the original M4–M6 baseline; use the [current PR checks](https://github.com/cbspire/raymond/pull/1/checks) for evidence against the latest branch commit.
+
+Local macOS 27/arm64 checks also verified the opt-in Docker wildcard coexistence: independent responses on separate loopback addresses with either startup order, followed by an installed daemon returning HTTP 200 at `raymond.test` while Docker/Traefik remained reachable on localhost. This is supplemental workstation evidence, not a replacement for the disposable macOS/Linux lifecycle jobs.

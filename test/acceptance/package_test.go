@@ -80,5 +80,50 @@ func candidate(t *testing.T) string {
 		t.Fatal("binary version does not match candidate archive", string(version))
 	}
 	noRuntimeDependencies(t, binary)
+	userConfig := filepath.Join(account.HomeDir, ".raymond", "raymond.yaml")
+	if _, e := os.Lstat(userConfig); !os.IsNotExist(e) {
+		t.Fatal("acceptance user already has a config; refusing to overwrite it")
+	}
+	_, parentError := os.Stat(filepath.Dir(userConfig))
+	t.Cleanup(func() {
+		if e := os.Remove(userConfig); e != nil && !os.IsNotExist(e) {
+			t.Error(e)
+		}
+		if os.IsNotExist(parentError) {
+			if e := os.Remove(filepath.Dir(userConfig)); e != nil && !os.IsNotExist(e) {
+				t.Error(e)
+			}
+		}
+	})
+	userCommand := func(args ...string) []byte {
+		t.Helper()
+		invocation := append([]string{"-H", "-u", testUser, "--", nativePath("env"), "PATH=" + os.Getenv("PATH"), binary}, args...)
+		return must(t, nativePath("sudo"), invocation...)
+	}
+	userCommand("install")
+	if got := strings.TrimSpace(string(userCommand("config", "path"))); got != userConfig {
+		t.Fatalf("wrong user config path: %s", got)
+	}
+	userCommand("config", "validate")
+	for path, mode := range map[string]os.FileMode{userConfig: 0600, filepath.Dir(userConfig): 0700} {
+		st, e := os.Stat(path)
+		if e != nil || st.Mode().Perm() != mode {
+			t.Fatalf("user config permissions: %s %v %v", path, st, e)
+		}
+	}
+	configBytes, e := os.ReadFile(userConfig)
+	if e != nil {
+		t.Fatal(e)
+	}
+	configBytes = append(configBytes, []byte("# preserve acceptance user edits\n")...)
+	if e = os.WriteFile(userConfig, configBytes, 0600); e != nil {
+		t.Fatal(e)
+	}
+	userCommand("install")
+	preserved, e := os.ReadFile(userConfig)
+	if e != nil || string(preserved) != string(configBytes) {
+		t.Fatal("repeat install replaced user configuration", e)
+	}
+	userCommand("config", "validate")
 	return binary
 }

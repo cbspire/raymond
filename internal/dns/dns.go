@@ -53,7 +53,7 @@ func (h *Handler) ServeDNS(w mdns.ResponseWriter, q *mdns.Msg) {
 	}
 	m.Authoritative = true
 	_, matched := h.routes.Match(name)
-	if !matched {
+	if !matched && name != router.DashboardHost {
 		m.Rcode = mdns.RcodeNameError
 	} else if question.Qtype == mdns.TypeA {
 		m.Answer = []mdns.RR{&mdns.A{Hdr: mdns.RR_Header{Name: question.Name, Rrtype: mdns.TypeA, Class: mdns.ClassINET, Ttl: 30}, A: h.ip}}

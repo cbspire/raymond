@@ -4,6 +4,8 @@ dns:
   listen: 127.0.0.43:53
 proxy:
   listen: 127.0.0.42:80
+  # macOS only; retains exact bind checks while permitting an HTTP wildcard neighbor.
+  # allow_wildcard_coexistence: true
 installations:
   - domain: install01.web.test
     target: 127.0.0.1:9001

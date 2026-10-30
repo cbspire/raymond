@@ -19,24 +19,25 @@ export PATH="$HOME/.local/bin:$PATH"
 raymond version
 ```
 
-This uses already-downloaded archives; it does not require Go, curl or network access. The installer chooses your OS/architecture, verifies SHA-256, validates archive members and executes the staged binary's `version` command before replacing a previous binary. For privileged setup below, substitute `"$HOME/.local/bin/raymond"` for `bin/raymond` in the bootstrap-copy command. Retain the example YAML as your own editable config.
+This uses already-downloaded archives; it does not require Go, curl or network access. The installer chooses your OS/architecture, verifies SHA-256, validates archive members and executes the staged binary's `version` command before replacing a previous binary. For privileged setup below, substitute `"$HOME/.local/bin/raymond"` for `./bin/raymond` in the service setup commands. Run `raymond install` to initialize your editable user configuration.
 
 The kernel and native OS services are the only runtime platform requirements. The shell installer uses standard archive/file/checksum tools to obtain the executable; those tools are not used to process DNS or proxy requests.
 
 ## Before OS setup
 
 1. Review the [native acceptance evidence](validation.md). The macOS 15/arm64 and Ubuntu 24.04/amd64 lifecycle jobs pass; other OS versions/architectures may need separate validation. Use a disposable system for first-time evaluation.
-2. Review your executable and YAML. Keep a separate editable source config; the installed root-owned copy is not the file to edit.
-3. Run `bin/raymond config validate --file raymond.yaml` and make sure the configured local backend is running.
+2. Run `bin/raymond install` as your ordinary user. This creates `~/.raymond/raymond.yaml` automatically, with a dedicated `raymond.test` zone and no active mappings. Edit that file to add your local backends. Existing config files are preserved, and sudo installation also initializes the invoking user's file if missing. An explicit `install --config path` uses that file instead.
+3. Run `bin/raymond config validate` and make sure the configured local backend is running. Review the generated YAML before privileged installation; the installed root-owned copy is not the file to edit.
 4. Read [macOS requirements](macos.md) or [Linux requirements](linux.md). Linux requires both systemd-resolved and systemd-networkd, plus the existing resolved stub symlink. Raymond does not convert unsupported resolver setups.
-5. Ensure no unrelated file already occupies a Raymond resource path. The installer refuses conflicts rather than overwriting them. A wildcard `:80` listener conflicts with the dedicated address; a listener on `127.0.0.1:80` can coexist.
+5. Ensure no unrelated file already occupies a Raymond resource path. The installer refuses conflicts rather than overwriting them. A wildcard `:80` listener is rejected by default; a listener on `127.0.0.1:80` can coexist. macOS users can explicitly enable `proxy.allow_wildcard_coexistence` for the HTTP proxy, subject to the exact loopback bind succeeding; see [Docker Desktop troubleshooting](troubleshooting.md#docker-desktop-on-macos).
 
 ## Binary locations and permissions
 
-The README uses `/var/lib/raymond-bootstrap/raymond` as the reviewed root-owned entry point for administrator commands. A user-owned downloaded binary must first be copied there with explicit `sudo install`; running the OS installer directly from a writable checkout or `~/.local/bin` is rejected. Root service files never point into your home directory.
+Run the reviewed executable directly with `sudo ./bin/raymond install`, or use `sudo "$HOME/.local/bin/raymond" install` for a downloaded binary. The installer takes a bounded snapshot of that executable and atomically publishes a separate root-owned service copy. Source files and ancestors may belong to root or the invoking sudo user, but other owners, symlinks and group/world-writable paths are rejected. No manual copy or ownership change of your checkout is required. Root service files never point into your home directory.
 
 | Resource | macOS | Linux |
 | --- | --- | --- |
+| Editable user config (0600; parent 0700) | `~/.raymond/raymond.yaml` | `~/.raymond/raymond.yaml` |
 | Managed service binary (0755) | `/Library/PrivilegedHelperTools/dev.raymond` | `/usr/libexec/raymond/raymond` |
 | Service config (0644) | `/etc/raymond/config.yaml` | `/etc/raymond/config.yaml` |
 | Ownership journal (0600) | `/var/lib/raymond/state.json` | `/var/lib/raymond/state.json` |
@@ -47,32 +48,32 @@ Fixed paths, root ownership and non-writable ancestors protect privileged startu
 
 ## Service setup and verification
 
-Follow the exact bootstrap, install, doctor and start commands in the [README](../README.md#install-and-enable-os-integration). `install` creates resolver/service resources but does not start the daemon immediately. Run bind diagnostics after install and before start; an already-running Raymond occupies its own ports.
+Follow the exact install, doctor and start commands in the [README](../README.md#install-and-enable-os-integration). With sudo, `install` uses the invoking user's configuration and installs a validated root-owned snapshot plus resolver/service resources, but does not start the daemon immediately. Without sudo, `install` only prepares the user config. The configured macOS wildcard policy is checked before creating resolver/service resources or loopback aliases; actual bind checks still run after alias setup, including with HTTP coexistence enabled. Run full bind diagnostics after privileged install and before start; an already-running Raymond occupies its own ports.
 
 After start, test OS DNS rather than only querying the Raymond socket directly:
 
 ```sh
 # macOS
-dscacheutil -q host -a name site.install01.web.test
+dscacheutil -q host -a name site.install01.web.raymond.test
 
 # Linux
-getent ahostsv4 site.install01.web.test
+getent ahostsv4 site.install01.web.raymond.test
 ```
 
 Expect `127.0.0.42`, then make an HTTP request using the hostname:
 
 ```sh
-curl --noproxy '*' http://site.install01.web.test/
+curl --noproxy '*' http://site.install01.web.raymond.test/
 ```
 
 For a proxy-only diagnostic that bypasses OS DNS:
 
 ```sh
-curl --noproxy '*' --resolve site.install01.web.test:80:127.0.0.42 \
-  http://site.install01.web.test/
+curl --noproxy '*' --resolve site.install01.web.raymond.test:80:127.0.0.42 \
+  http://site.install01.web.raymond.test/
 ```
 
-A successful direct proxy request does not establish that OS split DNS works. Use `status` and native manager logs when startup fails. macOS logs go to `/var/log/raymond.log`; Linux logs are available with `journalctl -u raymond.service`.
+A successful direct proxy request does not establish that OS split DNS works. Use `raymond status` to inspect service state and `raymond logs` to follow live requests. `logs --lines N` changes the recent history and `logs --no-follow` exits after printing it. macOS uses `/var/log/raymond.log`; Linux uses the journal for `raymond.service` only. Request logs require the managed service binary to include the current logging implementation; rebuilds require the documented uninstall/install/start cycle to update that copy.
 
 ## Foreground development without Linux OS setup
 
@@ -108,9 +109,9 @@ On macOS high ports still require the dedicated loopback aliases. Do not assume 
 
 An identical install is idempotent. Changing installed config or replacing its managed binary directly invalidates the ownership hashes and causes uninstall to refuse cleanup.
 
-1. Keep the existing bootstrap binary and installed resources intact.
-2. Run `sudo /var/lib/raymond-bootstrap/raymond uninstall`. It stops the service if needed.
-3. Edit and validate your separate source YAML, or explicitly replace the root-owned bootstrap copy with the reviewed new binary.
+1. Keep the existing managed binary and installed resources intact.
+2. Run `sudo ./bin/raymond uninstall`. It stops the service if needed.
+3. Edit and validate `~/.raymond/raymond.yaml` (or your explicit source YAML), or rebuild/replace your reviewed local binary.
 4. Run install, doctor and start again using the source config.
 
 This requires downtime; there is no hot reload. On macOS use `start` after `stop`; `restart` kickstarts an already-loaded launchd service.
@@ -118,12 +119,12 @@ This requires downtime; there is no hot reload. On macOS use `start` after `stop
 ## Uninstall and interrupted setup
 
 ```sh
-sudo /var/lib/raymond-bootstrap/raymond uninstall
+sudo ./bin/raymond uninstall
 ```
 
-Only resources that match the recorded ownership hashes are removed. Preexisting resolver files and unrelated systemd drop-ins are preserved. Only recorded Raymond-created macOS aliases are removed. Your source config, user-downloaded binary and bootstrap executable remain, as can empty directories, a lock file and logs. Remove those user-created copies separately if no longer needed; they are not service resources.
+Only resources that match the recorded ownership hashes are removed. Preexisting resolver files and unrelated systemd drop-ins are preserved. Only recorded Raymond-created macOS aliases are removed. Your `~/.raymond/raymond.yaml` (or explicit source config), user-downloaded binary remain, as can empty directories, a lock file and logs. Remove those user-created copies separately if no longer needed; they are not service resources.
 
-A failed or interrupted install can leave a journal for explicit rollback. Retry uninstall with the same bootstrap binary. If a file was changed, restore its reviewed original installed content before retrying; do not delete the journal or force-remove unknown resources. An unsupported or ambiguous resolver state is an error, not an instruction to replace `resolv.conf`.
+A failed or interrupted install can leave a journal for explicit rollback. Retry uninstall with the same reviewed local binary. If a file was changed, restore its reviewed original installed content before retrying; do not delete the journal or force-remove unknown resources. An unsupported or ambiguous resolver state is an error, not an instruction to replace `resolv.conf`.
 
 ## Release binary installer
 

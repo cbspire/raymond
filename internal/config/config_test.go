@@ -1,6 +1,7 @@
 package config
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -78,5 +79,23 @@ func TestNonCanonicalPort(t *testing.T) {
 		if _, e := address(s); e == nil {
 			t.Fatalf("accepted non-canonical port %s", s)
 		}
+	}
+}
+
+func TestWildcardCoexistenceIsExplicitAndMacOnly(t *testing.T) {
+	ordinary, e := Decode(strings.NewReader("version: 1\ndns:\n  zones: [test]\n"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if ordinary.Proxy.AllowWildcardCoexistence {
+		t.Fatal("wildcard coexistence enabled by default")
+	}
+	c, e := Decode(strings.NewReader("version: 1\ndns:\n  zones: [test]\nproxy:\n  allow_wildcard_coexistence: true\n"))
+	if runtime.GOOS == "darwin" {
+		if e != nil || !c.Proxy.AllowWildcardCoexistence {
+			t.Fatalf("macOS opt-in: %+v, %v", c.Proxy, e)
+		}
+	} else if e == nil {
+		t.Fatal("accepted macOS-only workaround on another platform")
 	}
 }

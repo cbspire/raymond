@@ -38,6 +38,14 @@ func root() error {
 	return nil
 }
 func native(name string, args ...string) error {
+	return runNative(false, name, args...)
+}
+
+func probeNative(name string, args ...string) error {
+	return runNative(true, name, args...)
+}
+
+func runNative(quiet bool, name string, args ...string) error {
 	paths := map[string]string{"systemctl": "/usr/bin/systemctl", "resolvectl": "/usr/bin/resolvectl", "networkctl": "/usr/bin/networkctl", "udevadm": "/usr/bin/udevadm", "ip": "/usr/sbin/ip", "launchctl": "/bin/launchctl", "ifconfig": "/sbin/ifconfig"}
 	path, ok := paths[name]
 	if !ok {
@@ -46,11 +54,20 @@ func native(name string, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	c := exec.CommandContext(ctx, path, args...)
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	return c.Run()
+	if !quiet {
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+	}
+	if e := c.Run(); e != nil {
+		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), e)
+	}
+	return nil
 }
 func trusted(path string) error {
+	return trustedFor(path, 0)
+}
+
+func trustedFor(path string, owner int) error {
 	if e := SafePath(path); e != nil {
 		return e
 	}
@@ -63,8 +80,11 @@ func trusted(path string) error {
 			return e
 		}
 		s, ok := st.Sys().(*syscall.Stat_t)
-		if !ok || s.Uid != 0 {
-			return fmt.Errorf("%s must be root-owned", p)
+		if !ok || (s.Uid != 0 && int(s.Uid) != owner) {
+			if owner == 0 {
+				return fmt.Errorf("%s must be root-owned", p)
+			}
+			return fmt.Errorf("%s must belong to root or the invoking user", p)
 		}
 	}
 	return nil
@@ -136,10 +156,11 @@ func Install(path string) error {
 	if e != nil {
 		return e
 	}
-	if e = trusted(exe); e != nil {
-		return fmt.Errorf("install a reviewed root-owned executable first: %w", e)
+	owner, e := installerUID()
+	if e != nil {
+		return e
 	}
-	b, e = os.ReadFile(exe)
+	b, e = readInstallExecutable(exe, owner)
 	if e != nil {
 		return e
 	}
@@ -171,6 +192,10 @@ func Install(path string) error {
 		}
 		return nil
 	} else if !os.IsNotExist(e) {
+		return e
+	}
+	// Detect conflicts that need no aliases before creating owned OS resources.
+	if e = diagnostics.CheckWildcardListeners(c); e != nil {
 		return e
 	}
 	var created []string
@@ -340,7 +365,7 @@ func Control(action string) error {
 		if e := ensureAliasesLocked(); e != nil {
 			return e
 		}
-		if native("launchctl", "print", "system/dev.raymond") == nil {
+		if probeNative("launchctl", "print", "system/dev.raymond") == nil {
 			return nil
 		}
 		return native("launchctl", "bootstrap", "system", "/Library/LaunchDaemons/dev.raymond.plist")
@@ -377,7 +402,7 @@ func Uninstall() error {
 	}
 	switch runtime.GOOS {
 	case "linux":
-		if native("systemctl", "is-active", "--quiet", "raymond.service") == nil {
+		if probeNative("systemctl", "is-active", "--quiet", "raymond.service") == nil {
 			if e = native("systemctl", "stop", "raymond.service"); e != nil {
 				return e
 			}
@@ -388,7 +413,7 @@ func Uninstall() error {
 			}
 		}
 	case "darwin":
-		if native("launchctl", "print", "system/dev.raymond") == nil {
+		if probeNative("launchctl", "print", "system/dev.raymond") == nil {
 			if e = native("launchctl", "bootout", "system/dev.raymond"); e != nil {
 				return e
 			}

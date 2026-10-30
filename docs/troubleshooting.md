@@ -11,3 +11,29 @@ Linux integration requires already-active systemd-resolved and systemd-networkd;
 If install was interrupted, the root-owned journal is retained. Uninstall verifies file hashes before cleanup. Restore operator-modified installed content from your reviewed configuration/binary before retrying; do not force-delete unrelated resources. Unsupported runners must fail visibly rather than skip required integration.
 
 The binary download installer refuses directories or symbolic links named `raymond` at its destination. Choose an explicit different absolute `RAYMOND_INSTALL_DIR` or resolve the conflicting path yourself; do not rerun it with sudo to bypass the refusal. A failed staged `version` command preserves the old binary. If no release exists, build the current candidate from source instead of retrying a missing release URL. See the [installation walkthrough](installation.md).
+
+## Docker Desktop on macOS
+
+On the tested Mac with Docker Desktop 4.97.0, publishing `127.0.0.1:81:18080` produced a host `*:81` socket and accepted requests on a second loopback address. Publishing the same container endpoint as `127.0.0.1:18081:18080` respected the exact host IP. Thus changing Compose from `80:80` to `127.0.0.1:80:80` alone may not remove the low-port wildcard listener.
+
+A separate high-port test verified that Darwin can route an exact-address native listener and a Docker wildcard socket independently: requests to the dedicated loopback reached the native server while localhost continued to reach Docker with the same HTTP response. Both startup orders passed, and all diagnostic containers were removed. These checks establish socket coexistence on this Mac, not privileged OS lifecycle acceptance.
+
+To opt into that behavior without stopping Docker, edit `~/.raymond/raymond.yaml`:
+
+```yaml
+proxy:
+  listen: 127.0.0.42:80
+  allow_wildcard_coexistence: true
+```
+
+Then run `raymond config validate`, followed by the documented explicit `sudo raymond install` and `sudo raymond start` from the reviewed local binary. If Raymond is already installed, uninstall first using the existing installed resource journal. The workaround remains subject to the kernel accepting Raymond's exact socket; real bind errors are never ignored. DNS conflicts remain errors. No root-owned service or resolver changes are made merely by editing the user config.
+
+Docker documents the changed privileged-port handling from version 4.97 in its [macOS permission requirements](https://docs.docker.com/desktop/setup/install/mac-permission-requirements/#binding-privileged-ports).
+
+## Startup messages and live requests
+
+A missing-service check before the first launchd bootstrap is expected; it is now silent. Successful `start`, `stop` and `restart` commands print a clear acknowledgement. `status` still shows the native service state, and real bootstrap failures remain visible.
+
+Use `raymond logs` for the last 50 service log lines followed by new requests. Use `raymond logs --lines 100` for more history or `raymond logs --no-follow` to return immediately. Ctrl+C stops log following. macOS follows the fixed service log file across rotation, and Linux uses a journal filter for Raymond's unit. Foreground `serve` writes the same access records directly to stderr.
+
+An empty file with the older installed daemon does not mean requests are failing: the old implementation emitted no access events. After rebuilding, uninstall/install/start to deploy the new daemon; a restart alone does not replace the protected executable. HTTP request records contain method, host, escaped path, final status, bytes and duration. Query strings, authentication headers, cookies and payloads are excluded. Long-lived streams and WebSocket requests appear when they complete.

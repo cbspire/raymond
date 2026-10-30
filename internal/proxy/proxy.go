@@ -3,6 +3,7 @@ package proxy
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cbspire/raymond/internal/config"
 	"github.com/cbspire/raymond/internal/router"
 )
 
@@ -27,7 +29,7 @@ func New(routes *router.Router) http.Handler {
 	}, ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 		http.Error(w, "Raymond: backend unavailable", http.StatusBadGateway)
 	}}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return accessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodConnect {
 			http.Error(w, "Raymond: CONNECT is unsupported", http.StatusMethodNotAllowed)
 			return
@@ -44,9 +46,13 @@ func New(routes *router.Router) http.Handler {
 		}
 		target, ok := routes.Match(host)
 		if !ok {
+			if name, e := config.Normalize(host); e == nil && name == router.DashboardHost {
+				serveDashboard(w, r)
+				return
+			}
 			http.Error(w, "Raymond: no installation for hostname", http.StatusNotFound)
 			return
 		}
 		p.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), targetKey{}, target)))
-	})
+	}), slog.Default())
 }

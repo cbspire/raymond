@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -18,7 +19,8 @@ type DNS struct {
 	Listen string   `yaml:"listen"`
 }
 type Proxy struct {
-	Listen string `yaml:"listen"`
+	Listen                   string `yaml:"listen"`
+	AllowWildcardCoexistence bool   `yaml:"allow_wildcard_coexistence,omitempty"`
 }
 type Installation struct {
 	Domain string `yaml:"domain"`
@@ -94,6 +96,9 @@ func address(s string) (netip.Addr, error) {
 func (c *Config) Validate() error {
 	if c.Version != 1 {
 		return fmt.Errorf("version must be 1")
+	}
+	if c.Proxy.AllowWildcardCoexistence && runtime.GOOS != "darwin" {
+		return fmt.Errorf("proxy.allow_wildcard_coexistence is supported only on macOS")
 	}
 	if c.DNS.Listen == "" {
 		c.DNS.Listen = "127.0.0.43:53"
