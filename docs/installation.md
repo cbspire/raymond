@@ -1,6 +1,6 @@
 # Installation and removal
 
-Raymond has two installation steps: obtaining a binary as an ordinary user, then explicitly installing OS DNS/service integration as an administrator. Downloading the binary alone never changes DNS. The v0.1 candidate has no stable GitHub release yet. You can evaluate the downloadable candidate archives without Go, or use the [source-build walkthrough](../README.md#build-the-current-candidate) for development.
+Raymond has two installation steps: obtaining a binary as an ordinary user, then explicitly installing OS DNS/service integration as an administrator. Downloading the binary alone never changes DNS. Use the [released binary walkthrough](../README.md#install-a-released-binary) for `0.1.0`, download candidate archives for testing, or follow the [source-build walkthrough](../README.md#build-from-source) for development.
 
 ## Install a candidate without Go
 
@@ -12,7 +12,7 @@ Raymond has two installation steps: obtaining a binary as an ordinary user, then
 
 ```sh
 # Replace this value with the exact "version" from dist/metadata.json.
-RAYMOND_VERSION=v0.1.0-rc.gabcdef0 \
+RAYMOND_VERSION=0.1.0-rc.gabcdef0 \
   RAYMOND_ARCHIVE_DIR="$PWD/dist" \
   bash scripts/install.sh
 export PATH="$HOME/.local/bin:$PATH"
@@ -132,7 +132,7 @@ After a release exists, `scripts/install.sh` supports:
 
 | Variable | Behavior |
 | --- | --- |
-| `RAYMOND_VERSION=v0.1.0` | Select an immutable stable or prerelease tag; online mode otherwise resolves latest stable once. |
+| `RAYMOND_VERSION=0.1.0` | Select an immutable stable or prerelease tag; online mode otherwise resolves latest stable once. |
 | `RAYMOND_ARCHIVE_DIR=/absolute/path/to/dist` | Install already-downloaded archives and checksums without network access; requires a pinned version. |
 | `RAYMOND_INSTALL_DIR=/absolute/path` | Override `~/.local/bin`; only the binary is installed there. |
 

@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 — 2026-10-30
 
+- Publish releases with plain semantic-version tags and support prefixed or unprefixed versions in the binary installer.
 - Use stable major-version Action tags with automatic minor/patch updates.
 - Use generic application examples and a `routes` configuration key, while accepting existing user files.
 

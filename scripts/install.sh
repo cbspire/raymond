@@ -42,7 +42,7 @@ if [ -z "$version" ]; then
   fi
   version=${url##*/}
 fi
-[[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]] || fail 'Expected an immutable version such as v0.1.0 or v0.1.0-rc.1.'
+[[ "$version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]] || fail 'Expected an immutable version such as 0.1.0 or 0.1.0-rc.1.'
 archive="raymond_${version#v}_${os}_${arch}.tar.gz"
 base="https://github.com/$repo/releases/download/$version"
 tmp=$(mktemp -d)
