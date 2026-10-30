@@ -15,7 +15,7 @@ const RootDir = "/var/lib/raymond/management"
 const SocketPath = SocketDir + "/control.sock"
 const Prefix = "/api/v1/"
 const Origin = "http://raymond.test"
-const CookieName = "raymond_session"
+const SessionHeader = "X-Raymond-Session"
 
 type Metadata struct {
 	UID        int    `json:"uid"`

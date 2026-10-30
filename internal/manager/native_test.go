@@ -322,16 +322,19 @@ func TestNativeManagedLifecycle(t *testing.T) {
 		t.Fatal(e)
 	}
 	var session struct {
-		CSRF string `json:"csrf"`
+		CSRF    string `json:"csrf"`
+		Session string `json:"session"`
 	}
 	if e = json.NewDecoder(response.Body).Decode(&session); e != nil {
 		t.Fatal(e)
 	}
 	response.Body.Close()
-	if response.StatusCode != 200 || len(response.Cookies()) != 1 {
+	if response.StatusCode != 200 || len(response.Cookies()) != 0 {
 		t.Fatal("restricted proxy credential delivery/session failed")
 	}
-	cookie := response.Cookies()[0]
+	if session.Session == "" {
+		t.Fatal("missing browser session token")
+	}
 	changed := original.Saved.Config
 	changed.Routes = append([]config.Route(nil), changed.Routes...)
 	changed.Routes = append(changed.Routes, config.Route{Domain: "*.apps.test", Target: strings.TrimPrefix(backend.URL, "http://")})
@@ -495,7 +498,7 @@ func TestNativeManagedLifecycle(t *testing.T) {
 	// cross-origin mutations remain rejected by the real installed proxy.
 	request, _ := http.NewRequest("GET", "http://127.0.0.42/api/v1/state", nil)
 	request.Host = "raymond.test"
-	request.AddCookie(cookie)
+	request.Header.Set(control.SessionHeader, session.Session)
 	response, e = browser.Do(request)
 	if e != nil {
 		t.Fatal(e)
@@ -508,7 +511,7 @@ func TestNativeManagedLifecycle(t *testing.T) {
 	unsafe.Host = "raymond.test"
 	unsafe.Header.Set("Origin", "http://hostile.test")
 	unsafe.Header.Set("Content-Type", "application/json")
-	unsafe.AddCookie(cookie)
+	unsafe.Header.Set(control.SessionHeader, session.Session)
 	response, e = browser.Do(unsafe)
 	if e != nil {
 		t.Fatal(e)
@@ -523,7 +526,7 @@ func TestNativeManagedLifecycle(t *testing.T) {
 		request.Header.Set("Origin", control.Origin)
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("X-Raymond-CSRF", session.CSRF)
-		request.AddCookie(cookie)
+		request.Header.Set(control.SessionHeader, session.Session)
 		response, e = browser.Do(request)
 		if e != nil {
 			t.Fatal(e)

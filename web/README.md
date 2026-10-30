@@ -16,4 +16,4 @@ Commit source, `package-lock.json` and the generated `internal/proxy/web` assets
 
 Dialogs use a fresh server-generated style nonce for Radix scroll locking. The bootstrap reads only that nonce from a meta tag; scripts/styles remain self-hosted, inline scripts are forbidden, and arbitrary inline styles are not permitted by CSP. The browser test records CSP violations across navigation and tests focus/Escape behavior.
 
-Themes follow the OS until explicitly selected and persist in local storage. Launch credentials stay in a removed URL fragment, API credentials use same-origin cookies/CSRF headers, config/logs render as React text, and drafts preserve their original saved revision after a failed save.
+Themes follow the OS until explicitly selected and persist in local storage. Launch credentials stay in a removed URL fragment, API credentials use a tab-scoped `sessionStorage` capability sent in an explicit session header plus CSRF headers (cookies are omitted, redirects rejected), config/logs render as React text, and drafts preserve their original saved revision after a failed save.

@@ -160,7 +160,7 @@ func TestUnixBrokerEndToEndCredentials(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer response.Body.Close()
-	if response.StatusCode != 200 || len(response.Cookies()) != 1 {
+	if response.StatusCode != 200 || len(response.Cookies()) != 0 {
 		t.Fatal("session exchange failed", response.StatusCode)
 	}
 	var session map[string]string
@@ -173,7 +173,7 @@ func TestUnixBrokerEndToEndCredentials(t *testing.T) {
 	request.Header.Set("Origin", control.Origin)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Raymond-CSRF", session["csrf"])
-	request.AddCookie(response.Cookies()[0])
+	request.Header.Set(control.SessionHeader, session["session"])
 	result, e := client.HTTP.Do(request)
 	if e != nil {
 		t.Fatal(e)

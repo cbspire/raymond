@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -211,7 +212,8 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 }
 func OwnerCall(ctx context.Context, executable string, m control.Metadata, r OwnerRequest) (OwnerResult, error) {
 	var result OwnerResult
-	if m.UID <= 0 || m.GID < 0 {
+	// The all-ones value is also reserved by setuid/setgid as “leave unchanged”.
+	if m.UID <= 0 || m.UID >= math.MaxUint32 || m.GID < 0 || m.GID >= math.MaxUint32 {
 		return result, fmt.Errorf("management requires an ordinary enrolled owner")
 	}
 	if e := install.Trusted(executable); e != nil {
@@ -227,7 +229,8 @@ func EnrollOwner(ctx context.Context, executable string, m control.Metadata, r O
 }
 func ownerCall(ctx context.Context, executable string, m control.Metadata, r OwnerRequest) (OwnerResult, error) {
 	var result OwnerResult
-	if m.UID <= 0 || m.GID < 0 {
+	// The all-ones value is also reserved by setuid/setgid as “leave unchanged”.
+	if m.UID <= 0 || m.UID >= math.MaxUint32 || m.GID < 0 || m.GID >= math.MaxUint32 {
 		return result, fmt.Errorf("invalid enrolled account")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)

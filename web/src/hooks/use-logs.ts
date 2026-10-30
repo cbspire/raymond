@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sessionHeaders } from "../lib/api";
 export function useLogs(active: boolean, online: boolean) {
   const [lines, setLines] = useState<string[]>([]);
   const [paused, setPaused] = useState(false);
@@ -15,7 +16,9 @@ export function useLogs(active: boolean, online: boolean) {
     async function connect() {
       try {
         const response = await fetch("/api/v1/logs", {
-          credentials: "same-origin",
+          credentials: "omit",
+          redirect: "error",
+          headers: sessionHeaders(),
           signal: controller.signal,
         });
         if (!response.ok || !response.body)

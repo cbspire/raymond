@@ -156,3 +156,29 @@ func TestDashboardStyleNonce(t *testing.T) {
 		previous = nonce
 	}
 }
+
+func TestAppRouteDoesNotReceiveDashboardCredentials(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Raymond-Session") != "" || r.Header.Get("X-Raymond-CSRF") != "" {
+			t.Error("dashboard credentials leaked to an application")
+		}
+		if r.Header.Get("Authorization") != "Bearer application-token" || r.Header.Get("Cookie") != "application=value" {
+			t.Error("application credentials changed")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer backend.Close()
+	handler := newWithControl(router.New([]config.Route{{Domain: "raymond.test", Target: strings.TrimPrefix(backend.URL, "http://")}}), nil)
+	for _, path := range []string{"/", "/api/v1/state", "/api/v1/logs"} {
+		request := httptest.NewRequest("GET", "http://raymond.test"+path, nil)
+		request.Header.Set("X-Raymond-Session", "private-session")
+		request.Header.Set("X-Raymond-CSRF", "private-csrf")
+		request.Header.Set("Authorization", "Bearer application-token")
+		request.Header.Set("Cookie", "application=value")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusNoContent {
+			t.Fatal("configured route lost precedence", response.Code)
+		}
+	}
+}

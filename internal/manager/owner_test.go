@@ -2,7 +2,10 @@ package manager
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"github.com/cbspire/raymond/internal/control"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,5 +101,14 @@ func TestOwnerCLIReplacementCAS(t *testing.T) {
 	got, e := os.ReadFile(path)
 	if e != nil || string(got) != "new executable" {
 		t.Fatal(e)
+	}
+}
+
+func TestOwnerCallRejectsUnrepresentableIdentity(t *testing.T) {
+	for _, ids := range [][2]int{{0, 1}, {-1, 1}, {1, -1}, {math.MaxUint32, 1}, {math.MaxUint32 + 1, 1}, {1, math.MaxUint32}, {1, math.MaxUint32 + 1}} {
+		_, err := EnrollOwner(context.Background(), "/nonexistent-raymond-helper", control.Metadata{UID: ids[0], GID: ids[1]}, OwnerRequest{Action: "config-read"})
+		if err == nil || !strings.Contains(err.Error(), "invalid enrolled account") {
+			t.Fatalf("identity %v reached helper execution: %v", ids, err)
+		}
 	}
 }

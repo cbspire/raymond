@@ -18,6 +18,7 @@ type session struct {
 	Expires time.Time `json:"expires"`
 }
 type authData struct {
+	Version  int                  `json:"version"`
 	Sessions map[string]session   `json:"sessions"`
 	Launches map[string]time.Time `json:"launches"`
 }
@@ -32,10 +33,23 @@ func Equal(a, b string) bool {
 	return len(a) > 0 && subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 func NewAuth(path string) (*Auth, error) {
-	a := &Auth{path: path, data: authData{Sessions: map[string]session{}, Launches: map[string]time.Time{}}}
+	a := &Auth{path: path, data: authData{Version: 1, Sessions: map[string]session{}, Launches: map[string]time.Time{}}}
 	if b, e := os.ReadFile(path); e == nil {
-		if e = json.Unmarshal(b, &a.data); e != nil {
+		var saved authData
+		if e = json.Unmarshal(b, &saved); e != nil {
 			return nil, e
+		}
+		switch saved.Version {
+		case 0:
+			// Cookie capabilities must not remain usable as header capabilities after
+			// migration. An existing browser authorizes once more with raymond dashboard.
+			if e = AtomicJSON(path, a.data); e != nil {
+				return nil, e
+			}
+		case 1:
+			a.data = saved
+		default:
+			return nil, fmt.Errorf("unsupported browser session version")
 		}
 	} else if !os.IsNotExist(e) {
 		return nil, e
@@ -120,13 +134,13 @@ func (a *Auth) Exchange(token string) (string, string, error) {
 	if len(a.data.Sessions) >= 64 {
 		return "", "", fmt.Errorf("too many dashboard sessions")
 	}
-	cookie, csrf := rand.Text(), rand.Text()
-	a.data.Sessions[hash(cookie)] = session{csrf, time.Now().Add(30 * 24 * time.Hour)}
-	return cookie, csrf, AtomicJSON(a.path, a.data)
+	token, csrf := rand.Text(), rand.Text()
+	a.data.Sessions[hash(token)] = session{csrf, time.Now().Add(30 * 24 * time.Hour)}
+	return token, csrf, AtomicJSON(a.path, a.data)
 }
-func (a *Auth) Session(cookie string) (string, bool) {
+func (a *Auth) Session(token string) (string, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	s, ok := a.data.Sessions[hash(cookie)]
+	s, ok := a.data.Sessions[hash(token)]
 	return s.CSRF, ok && time.Now().Before(s.Expires)
 }

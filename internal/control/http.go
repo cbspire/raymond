@@ -94,24 +94,23 @@ func Handler(b Backend, a *Auth, owner, proxy string) http.Handler {
 				Failure(w, e)
 				return
 			}
-			cookie, csrf, e := a.Exchange(in.Token)
+			session, csrf, e := a.Exchange(in.Token)
 			if e != nil {
 				Failure(w, &Error{401, e.Error()})
 				return
 			}
-			http.SetCookie(w, &http.Cookie{Name: CookieName, Value: cookie, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 30 * 24 * 3600})
-			JSON(w, 200, map[string]string{"csrf": csrf})
+			JSON(w, 200, map[string]string{"session": session, "csrf": csrf})
 			return
 		}
 		csrf := ""
 		if !isOwner {
-			cookies := r.CookiesNamed(CookieName)
-			if len(cookies) != 1 {
+			sessions := r.Header.Values(SessionHeader)
+			if len(sessions) != 1 {
 				Failure(w, &Error{401, "open this browser with raymond dashboard"})
 				return
 			}
 			var ok bool
-			csrf, ok = a.Session(cookies[0].Value)
+			csrf, ok = a.Session(sessions[0])
 			if !ok {
 				Failure(w, &Error{401, "session expired; run raymond dashboard"})
 				return

@@ -2,11 +2,14 @@ package control
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type stubBackend struct{ calls int }
@@ -24,7 +27,7 @@ func TestBrowserBoundary(t *testing.T) {
 		t.Fatal(e)
 	}
 	launch, _ := a.Launch()
-	cookie, csrf, e := a.Exchange(launch)
+	session, csrf, e := a.Exchange(launch)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -34,16 +37,16 @@ func TestBrowserBoundary(t *testing.T) {
 	b := &stubBackend{}
 	h := Handler(b, a, "owner", "proxy")
 	for _, tc := range []struct {
-		name, host, origin, csrf, cookie, auth string
-		status                                 int
+		name, host, origin, csrf, session, auth string
+		status                                  int
 	}{
-		{"allowed", "raymond.test", Origin, csrf, cookie, "proxy", 202},
+		{"allowed", "raymond.test", Origin, csrf, session, "proxy", 202},
 		{"no session", "raymond.test", Origin, csrf, "", "proxy", 401},
-		{"csrf", "raymond.test", Origin, "bad", cookie, "proxy", 403},
-		{"site", "raymond.test", "http://app.raymond.test", csrf, cookie, "proxy", 403},
-		{"host", "app.raymond.test", Origin, csrf, cookie, "proxy", 403},
-		{"no origin", "raymond.test", "", csrf, cookie, "proxy", 403},
-		{"no broker credential", "raymond.test", Origin, csrf, cookie, "bad", 401},
+		{"csrf", "raymond.test", Origin, "bad", session, "proxy", 403},
+		{"site", "raymond.test", "http://app.raymond.test", csrf, session, "proxy", 403},
+		{"host", "app.raymond.test", Origin, csrf, session, "proxy", 403},
+		{"no origin", "raymond.test", "", csrf, session, "proxy", 403},
+		{"no broker credential", "raymond.test", Origin, csrf, session, "bad", 401},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest("POST", "http://"+tc.host+Prefix+"operations", strings.NewReader(`{"action":"restart"}`))
@@ -51,7 +54,7 @@ func TestBrowserBoundary(t *testing.T) {
 			r.Header.Set("Origin", tc.origin)
 			r.Header.Set("X-Raymond-CSRF", tc.csrf)
 			r.Header.Set("Content-Type", "application/json")
-			r.AddCookie(&http.Cookie{Name: CookieName, Value: tc.cookie})
+			r.Header.Set(SessionHeader, tc.session)
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
 			if w.Code != tc.status {
@@ -66,7 +69,7 @@ func TestBrowserBoundary(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, ok := saved.Session(cookie); !ok {
+	if _, ok := saved.Session(session); !ok {
 		t.Fatal("session lost on restart")
 	}
 }
@@ -107,5 +110,97 @@ func TestOperationRequestBoundary(t *testing.T) {
 	}
 	if b.calls != 0 {
 		t.Fatal("invalid request reached backend")
+	}
+}
+
+func TestBrowserSessionUsesExplicitHeader(t *testing.T) {
+	auth, err := NewAuth(filepath.Join(t.TempDir(), "sessions.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	launch, err := auth.Launch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := Handler(&stubBackend{}, auth, "owner", "proxy")
+	request := httptest.NewRequest("POST", Origin+Prefix+"session", strings.NewReader(`{"token":"`+launch+`"}`))
+	request.Header.Set("Authorization", "Bearer proxy")
+	request.Header.Set("Origin", Origin)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	var session map[string]string
+	if err = json.Unmarshal(response.Body.Bytes(), &session); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != 200 || response.Header().Get("Set-Cookie") != "" || session["session"] == "" || session["csrf"] == "" {
+		t.Fatal("browser exchange must return a header session without cookies")
+	}
+	for _, test := range []struct {
+		name    string
+		headers http.Header
+		status  int
+	}{
+		{"header", http.Header{"X-Raymond-Session": {session["session"]}}, 200},
+		{"duplicate", http.Header{"X-Raymond-Session": {session["session"], session["session"]}}, 401},
+		{"cookie only", http.Header{"Cookie": {"raymond_session=" + session["session"]}}, 401},
+		{"cookie ambiguity", http.Header{"Cookie": {"raymond_session=" + session["session"] + "; raymond_session=other"}}, 401},
+		{"missing", http.Header{}, 401},
+		{"invalid", http.Header{"X-Raymond-Session": {"invalid"}}, 401},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest("GET", Origin+Prefix+"state", nil)
+			request.Header = test.headers
+			request.Header.Set("Authorization", "Bearer proxy")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != test.status {
+				t.Fatalf("status %d, expected %d", response.Code, test.status)
+			}
+		})
+	}
+}
+
+func TestHeaderSessionMigrationRevokesLegacyCookies(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	legacy := map[string]any{"sessions": map[string]any{hash("legacy-cookie"): session{CSRF: "old-csrf", Expires: time.Now().Add(time.Hour)}}, "launches": map[string]time.Time{hash("legacy-launch"): time.Now().Add(time.Minute)}}
+	if err := AtomicJSON(path, legacy); err != nil {
+		t.Fatal(err)
+	}
+	auth, err := NewAuth(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := auth.Session("legacy-cookie"); ok {
+		t.Fatal("legacy cookie remained a valid header capability")
+	}
+	if _, _, err := auth.Exchange("legacy-launch"); err == nil {
+		t.Fatal("legacy launch survived authentication migration")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "old-csrf") || strings.Contains(string(data), hash("legacy-cookie")) {
+		t.Fatal("legacy session survived on disk")
+	}
+	reopened, err := NewAuth(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := reopened.Launch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability, _, err := reopened.Exchange(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := NewAuth(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := persisted.Session(capability); !ok {
+		t.Fatal("header capability was lost on restart")
 	}
 }

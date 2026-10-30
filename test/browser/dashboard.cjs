@@ -12,6 +12,8 @@ fs.mkdirSync(output, {recursive:true});
 let logsConnections = 0;
 const server = http.createServer((req,res) => {
  if (req.url === '/api/v1/logs') {
+  assert.equal(req.headers['x-raymond-session'],'test-session');
+  assert.equal(req.headers.cookie,undefined,'log requests must omit cookies');
   logsConnections++;
   res.writeHead(200,{'Content-Type':'application/x-ndjson','Cache-Control':'no-store'});
   res.write('{"method":"GET","host":"studio.test","path":"/","status":200}\n{"method":"GET","host":"docs.test","path":"/missing","status":404}\n');
@@ -32,17 +34,27 @@ const server = http.createServer((req,res) => {
  try {
  const context = await browser.newContext({viewport:{width:1440,height:1000}});
  const page = await context.newPage();
+ await context.addCookies([{name:'application_cookie',value:'must-not-enter-management',url:origin}]);
  const cspViolations = []; await page.exposeFunction('reportCSP',directive => cspViolations.push(directive));
  await page.addInitScript(() => document.addEventListener('securitypolicyviolation', event => window.reportCSP(event.violatedDirective)));
  const errors = [];
  page.on('pageerror',error => errors.push(error.message));
  let config = {version:1,dns:{zones:['test','localhost'],listen:'127.0.0.2:53'},proxy:{listen:'127.0.0.3:80'},routes:[{domain:'studio.test',target:'127.0.0.1:3000'},{domain:'api.test',target:'127.0.0.1:8080'},{domain:'docs.test',target:'127.0.0.1:4321'},{domain:'*.sites.test',target:'127.0.0.1:8025'}]};
- let revision = 'a'.repeat(64), operations = [], conflict = false, disconnected = false, pending = false, recoveryOperation, invalidSaved=false;
- await page.route('**/api/v1/**',async route => {
+ let revision = 'a'.repeat(64), operations = [], conflict = false, disconnected = false, pending = false, recoveryOperation, invalidSaved=false, redirectState=false, sessionExchanges=0;
+ const apiFixture = async route => {
   const request = route.request(), endpoint = new URL(request.url()).pathname.slice(8);
   let data, status = 200;
   if (disconnected) { await route.fulfill({status:503,json:{error:'Management unavailable.'}}); return; }
-  if (endpoint === 'session') data = {csrf:'test-csrf'};
+  assert.equal(request.headers().cookie,undefined,'management requests must omit cookies');
+  const exchange = endpoint === 'session' && request.method() === 'POST';
+  if (!exchange && request.headers()['x-raymond-session'] !== 'test-session') {
+   await route.fulfill({status:401,json:{error:'Open this browser with raymond dashboard.'}});return;
+  }
+  if (exchange) {
+   assert.equal(request.postDataJSON().token,'fixture-launch');sessionExchanges++;
+   data = {csrf:'test-csrf',session:'test-session'};
+  } else if (endpoint === 'session') data = {csrf:'test-csrf'};
+  else if (endpoint === 'state' && redirectState) {await route.fulfill({status:302,headers:{Location:origin+'/redirect-target'}});return;}
   else if (endpoint === 'state') data = {version:'0.1.2-preview',platform:'linux/amd64',running:true,saved:{config:invalidSaved?{version:0,dns:{zones:null,listen:""},proxy:{listen:""},routes:null}:config,revision,error:invalidSaved?"Invalid YAML":undefined},active:{config,revision},pending:pending||invalidSaved,operation:recoveryOperation};
   else if (endpoint === 'operations' && request.method() === 'POST') {
    assert.equal(request.headers()['x-raymond-csrf'],'test-csrf');
@@ -56,9 +68,16 @@ const server = http.createServer((req,res) => {
   else if (endpoint === 'logs') { await route.continue(); return; }
   else { status = 404; data = {error:'Unknown fixture endpoint'}; }
   await route.fulfill({status,json:data});
- });
- await page.goto(origin);
+ };
+ await page.route('**/api/v1/**',apiFixture);
+ await page.goto(origin+'/#token=fixture-launch');
  await page.getByText('Connected locally',{exact:true}).waitFor();
+ assert.equal(new URL(page.url()).hash,'','launch token must leave the address bar');
+ assert.equal(await page.evaluate(() => sessionStorage.getItem('raymond-session')),'test-session');
+ assert.equal(await page.evaluate(() => localStorage.getItem('raymond-session')),null);
+ assert.ok(!(await context.cookies()).some(cookie => cookie.name === 'raymond_session'),'management must not create cookies');
+ const freshTab = await context.newPage();await freshTab.route('**/api/v1/**',apiFixture);await freshTab.goto(origin);
+ await freshTab.getByText(/Open this browser with raymond dashboard/).waitFor();await freshTab.close();
  await page.screenshot({path:path.join(output,'dashboard-desktop.png'),fullPage:true});
  await page.getByRole('button',{name:'Add service',exact:true}).click();
  await page.getByLabel('Domain',{exact:true}).fill('preview.test');
@@ -156,13 +175,17 @@ const server = http.createServer((req,res) => {
  await page.reload();await page.getByText('Operation completed.',{exact:true}).waitFor();assert.equal(operations.length,beforeRecovery,'reconnect must monitor, not resubmit native work');
  invalidSaved=true;await page.reload();await page.getByText('Saved configuration: Invalid YAML',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Add service',exact:true}).isEnabled(),false);
  await page.getByRole('button',{name:'Discard saved changes',exact:true}).click();await page.getByRole('button',{name:'Continue',exact:true}).click();await page.getByText('Operation completed.',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Add service',exact:true}).isEnabled(),true);
+ assert.equal(sessionExchanges,1,'reloads must reuse the tab-scoped session');
+ let followedRedirect=false;await page.route('**/redirect-target',async route => {followedRedirect=true;await route.fulfill({status:200,json:{}});});
+ redirectState=true;await page.reload();await page.getByText(/Open this page with raymond dashboard/).waitFor();assert.equal(followedRedirect,false,'management fetches must not follow redirects');
+ redirectState=false;
  pending = true; await page.reload(); await page.getByText('Saved changes are waiting to be applied.').waitFor();
  disconnected = true; await page.reload(); await page.getByText(/Management unavailable/).waitFor();
  assert.equal(await page.locator('#stop').isEnabled(),false);
  await page.screenshot({path:path.join(output,'dashboard-disconnected.png'),fullPage:true});
  assert.deepEqual(cspViolations,[],'dashboard must respect CSP');
  assert.deepEqual(errors,[]);
- console.log('PASS: wildcard service drafts, live streaming/append/pause/resume/cancellation, persisted dark mode, service CRUD, browser drafts, save/CSRF, search, settings, logs/filter/pause, diagnostics, stop cancellation, duplicate domains, stale saves, XSS, mobile overflow, focus, pending and disconnected states.');
+ console.log('PASS: cookie-free tab sessions, reload persistence, new-tab isolation, redirect rejection, wildcard service drafts, live streaming/append/pause/resume/cancellation, persisted dark mode, service CRUD, browser drafts, save/CSRF, search, settings, logs/filter/pause, diagnostics, stop cancellation, duplicate domains, stale saves, XSS, mobile overflow, focus, pending and disconnected states.');
  console.log('Screenshots: ' + output + ' (controlled API fixture; not native lifecycle acceptance)');
  await context.close();
  } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

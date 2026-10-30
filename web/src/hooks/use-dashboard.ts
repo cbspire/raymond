@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../lib/api";
+import { api, rememberSession } from "../lib/api";
 import type { Config, Operation, State } from "../lib/types";
 export function useDashboard() {
   const [state, setState] = useState<State>();
@@ -23,12 +23,17 @@ export function useDashboard() {
       try {
         const token = new URLSearchParams(location.hash.slice(1)).get("token");
         if (token) history.replaceState(null, "", location.pathname);
-        const session = await api<{ csrf: string }>(
+        const session = await api<{ csrf: string; session?: string }>(
           "session",
           token ? { token } : undefined,
           "",
           controller.signal,
         );
+        if (token) {
+          if (!session.session)
+            throw new Error("Dashboard session was not issued.");
+          rememberSession(session.session);
+        }
         csrf.current = session.csrf;
         const next = await api<State>(
           "state",

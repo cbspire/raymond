@@ -29,6 +29,9 @@ func newWithControl(routes *router.Router, client *control.Client) http.Handler 
 		r.Out.URL.Scheme = "http"
 		r.Out.URL.Host = r.In.Context().Value(targetKey{}).(string)
 		r.Out.Host = r.In.Host
+		// Management headers must never reach an app, including one that shadows the dashboard.
+		r.Out.Header.Del(control.SessionHeader)
+		r.Out.Header.Del("X-Raymond-CSRF")
 		r.Out.Header.Del("Forwarded")
 		r.SetXForwarded()
 		r.Out.Header.Set("X-Forwarded-Proto", "http")
