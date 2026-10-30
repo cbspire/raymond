@@ -14,7 +14,12 @@ func TestUnixOwnerCredentialRequiresEnrolledPeer(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root is an explicit administrator")
 	}
-	socket := filepath.Join(t.TempDir(), "peer.sock")
+	dir, err := os.MkdirTemp("", "rctl-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	socket := filepath.Join(dir, "peer.sock")
 	listener, e := net.Listen("unix", socket)
 	if e != nil {
 		t.Fatal(e)

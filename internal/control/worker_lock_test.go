@@ -37,7 +37,7 @@ func TestOperationLockSurvivesExec(t *testing.T) {
 		}
 		return
 	}
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	j, e := OpenOperations(dir)
 	if e != nil {
 		t.Fatal(e)

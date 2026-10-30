@@ -231,6 +231,22 @@ func TestNativeManagedLifecycle(t *testing.T) {
 			}
 		}
 	})
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		args := []string{"/usr/bin/journalctl", "--no-pager", "-n", "80", "-u", "raymond-manager.service", "-u", "raymond.service"}
+		if runtime.GOOS == "darwin" {
+			args = []string{"/usr/bin/tail", "-n", "80", "/var/log/raymond-manager.log", "/var/log/raymond.log"}
+		}
+		probe, stop := context.WithTimeout(context.Background(), 15*time.Second)
+		defer stop()
+		out, err := exec.CommandContext(probe, args[0], args[1:]...).CombinedOutput()
+		if len(out) > 12000 {
+			out = out[len(out)-12000:]
+		}
+		t.Logf("native service evidence (%v):\n%s", err, out)
+	})
 	// Migration is from the actual immutable 0.1.1 artifact, not just a cross-build.
 	download, e := os.MkdirTemp("", "raymond-old-release-")
 	if e != nil {

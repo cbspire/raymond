@@ -13,7 +13,7 @@ import (
 )
 
 func TestOperationsPersistAndSerialize(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	j, e := OpenOperations(dir)
 	if e != nil {
 		t.Fatal(e)
@@ -62,7 +62,7 @@ func TestOperationsPersistAndSerialize(t *testing.T) {
 }
 
 func TestConcurrentOperationsHaveOneWinner(t *testing.T) {
-	j, e := OpenOperations(t.TempDir())
+	j, e := OpenOperations(privateTempDir(t))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -91,7 +91,7 @@ func TestConcurrentOperationsHaveOneWinner(t *testing.T) {
 }
 
 func TestOperationRequestSnapshots(t *testing.T) {
-	j, e := OpenOperations(t.TempDir())
+	j, e := OpenOperations(privateTempDir(t))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -123,7 +123,7 @@ func TestOperationRequestSnapshots(t *testing.T) {
 }
 
 func TestOperationTransitionsAndSnapshots(t *testing.T) {
-	j, e := OpenOperations(t.TempDir())
+	j, e := OpenOperations(privateTempDir(t))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -176,7 +176,7 @@ func TestOperationTransitionsAndSnapshots(t *testing.T) {
 }
 
 func TestOperationPersistenceFailureRetainsLock(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	j, e := OpenOperations(dir)
 	if e != nil {
 		t.Fatal(e)
@@ -207,7 +207,7 @@ func TestOperationPersistenceFailureRetainsLock(t *testing.T) {
 }
 
 func TestOperationHistoryIsBounded(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	j, e := OpenOperations(dir)
 	if e != nil {
 		t.Fatal(e)
@@ -255,7 +255,7 @@ func TestOperationHistoryIsBounded(t *testing.T) {
 }
 
 func TestOperationsInterruptedWorkRequiresRecovery(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	j, e := OpenOperations(dir)
 	if e != nil {
 		t.Fatal(e)
@@ -298,7 +298,7 @@ func TestOperationsInterruptedWorkRequiresRecovery(t *testing.T) {
 }
 
 func TestOperationsRejectInvalidRequests(t *testing.T) {
-	j, e := OpenOperations(t.TempDir())
+	j, e := OpenOperations(privateTempDir(t))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -322,7 +322,7 @@ func TestOperationsValidateDiskState(t *testing.T) {
 		"trailing value": `{"version":1,"operations":[]} {}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			dir := t.TempDir()
+			dir := privateTempDir(t)
 			if e := os.WriteFile(filepath.Join(dir, "operations.json"), []byte(data), 0600); e != nil {
 				t.Fatal(e)
 			}
@@ -337,8 +337,8 @@ func TestOperationsValidateDiskState(t *testing.T) {
 func TestOperationsRejectSymlinks(t *testing.T) {
 	for _, file := range []string{"operations.lock", "operations.json"} {
 		t.Run(file, func(t *testing.T) {
-			dir := t.TempDir()
-			target := filepath.Join(t.TempDir(), "target")
+			dir := privateTempDir(t)
+			target := filepath.Join(privateTempDir(t), "target")
 			if e := os.WriteFile(target, []byte(`{"version":1,"operations":[]}`), 0600); e != nil {
 				t.Fatal(e)
 			}
@@ -357,7 +357,7 @@ func TestOperationsRejectUnsafeFiles(t *testing.T) {
 	for _, file := range []string{"operations.lock", "operations.json"} {
 		for _, kind := range []string{"public", "hardlink", "directory"} {
 			t.Run(file+"/"+kind, func(t *testing.T) {
-				dir := t.TempDir()
+				dir := privateTempDir(t)
 				p := filepath.Join(dir, file)
 				if kind == "directory" {
 					if e := os.Mkdir(p, 0700); e != nil {
@@ -385,7 +385,7 @@ func TestOperationsRejectUnsafeFiles(t *testing.T) {
 }
 
 func TestInheritedWorkerLockAndSnapshot(t *testing.T) {
-	dir := t.TempDir()
+	dir := privateTempDir(t)
 	broker, e := OpenOperations(dir)
 	if e != nil {
 		t.Fatal(e)
@@ -430,5 +430,25 @@ func TestInheritedWorkerLockAndSnapshot(t *testing.T) {
 	defer next.Close()
 	if next.Active() != nil {
 		t.Fatal("terminal work remains active")
+	}
+}
+
+func privateTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if e := os.Chmod(dir, 0700); e != nil {
+		t.Fatal(e)
+	}
+	return dir
+}
+
+func TestOperationsRejectPublicDirectory(t *testing.T) {
+	dir := t.TempDir()
+	if e := os.Chmod(dir, 0755); e != nil {
+		t.Fatal(e)
+	}
+	if j, e := OpenOperations(dir); e == nil {
+		j.Close()
+		t.Fatal("accepted public journal directory")
 	}
 }

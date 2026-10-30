@@ -425,6 +425,12 @@ func uninstallCommand() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	// A failed migration may have restored a pre-management protected binary.
+	// Prefer the explicitly invoked CLI when it remains outside managed resources;
+	// it is executed only after permanently dropping to the enrolled account.
+	if executable, err := os.Executable(); err == nil && executable != install.ManagedBinary() {
+		helper = executable
+	}
 	_, e = manager.EnrollOwner(ctx, helper, metadata, manager.OwnerRequest{Action: "credential-clear", Data: []byte(metadata.OwnerToken)})
 	return e
 }

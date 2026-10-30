@@ -172,8 +172,10 @@ func StartManagement(restart bool) error {
 		if e := native("systemctl", "daemon-reload"); e != nil {
 			return e
 		}
-		if e := native("systemctl", "reset-failed", "raymond-manager.service"); e != nil {
-			return e
+		if probeNative("systemctl", "is-failed", "--quiet", "raymond-manager.service") == nil {
+			if e := native("systemctl", "reset-failed", "raymond-manager.service"); e != nil {
+				return e
+			}
 		}
 		if e := native("systemctl", "enable", "raymond-manager.service"); e != nil {
 			return e

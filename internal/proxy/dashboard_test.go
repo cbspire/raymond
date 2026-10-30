@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -94,7 +95,12 @@ func TestDashboardAssetsAndMissingManager(t *testing.T) {
 }
 
 func TestDashboardForwardsOnlyWithProxyCredential(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "control.sock")
+	dir, err := os.MkdirTemp("", "rproxy-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	socket := filepath.Join(dir, "control.sock")
 	listener, e := net.Listen("unix", socket)
 	if e != nil {
 		t.Fatal(e)

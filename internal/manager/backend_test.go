@@ -26,6 +26,9 @@ func backendFixture(t *testing.T) *Backend {
 	}
 	var mu sync.Mutex
 	b := &Backend{Directory: t.TempDir(), Version: "0.1.2", Metadata: control.Metadata{ConfigPath: "/owner/config.yaml"}, streams: make(chan struct{}, 4)}
+	if e := os.Chmod(b.Directory, 0700); e != nil {
+		t.Fatal(e)
+	}
 	b.Owner = func(ctx context.Context, r OwnerRequest) (OwnerResult, error) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -121,7 +124,12 @@ func TestUnixBrokerEndToEndCredentials(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	socket := filepath.Join(t.TempDir(), "broker.sock")
+	dir, err := os.MkdirTemp("", "rmgr-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	socket := filepath.Join(dir, "broker.sock")
 	listener, e := net.Listen("unix", socket)
 	if e != nil {
 		t.Fatal(e)
