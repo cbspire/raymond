@@ -12,12 +12,18 @@ import (
 	"time"
 
 	"github.com/cbspire/raymond/internal/config"
+	"github.com/cbspire/raymond/internal/control"
 	"github.com/cbspire/raymond/internal/router"
 )
 
 type targetKey struct{}
 
 func New(routes *router.Router) http.Handler {
+	client, _ := control.ProxyClient()
+	return newWithControl(routes, client)
+}
+
+func newWithControl(routes *router.Router, client *control.Client) http.Handler {
 	transport := &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}).DialContext, MaxIdleConns: 100, MaxIdleConnsPerHost: 10, IdleConnTimeout: 90 * time.Second, ResponseHeaderTimeout: 30 * time.Second, DisableCompression: true}
 	p := &httputil.ReverseProxy{Transport: transport, FlushInterval: -1, Rewrite: func(r *httputil.ProxyRequest) {
 		r.Out.URL.Scheme = "http"
@@ -47,7 +53,7 @@ func New(routes *router.Router) http.Handler {
 		target, ok := routes.Match(host)
 		if !ok {
 			if name, e := config.Normalize(host); e == nil && name == router.DashboardHost {
-				serveDashboard(w, r)
+				serveManagement(w, r, client)
 				return
 			}
 			http.Error(w, "Raymond: no route for hostname", http.StatusNotFound)

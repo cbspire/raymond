@@ -68,7 +68,7 @@ func SaveOwned(path, expected string, c Config) (string, error) {
 	if e := c.Validate(); e != nil {
 		return "", e
 	}
-	old, e := OwnedDocument(path)
+	_, e := OwnedDocument(path)
 	if e != nil {
 		return "", e
 	}
@@ -81,7 +81,7 @@ func SaveOwned(path, expected string, c Config) (string, error) {
 	if e = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); e != nil {
 		return "", fmt.Errorf("another configuration edit is active")
 	}
-	old, e = OwnedDocument(path)
+	old, e := OwnedDocument(path)
 	if e != nil {
 		return "", e
 	}

@@ -166,9 +166,16 @@ func (c *Config) Validate() error {
 	}
 	seen = map[string]bool{}
 	for i, r := range c.Routes {
-		r.Domain, e = Normalize(r.Domain)
+		if len(strings.TrimSuffix(r.Domain, ".")) > 253 {
+			return fmt.Errorf("route domain: invalid hostname length")
+		}
+		wildcard := strings.HasPrefix(r.Domain, "*.")
+		r.Domain, e = Normalize(strings.TrimPrefix(r.Domain, "*."))
 		if e != nil {
 			return fmt.Errorf("route domain: %w", e)
+		}
+		if wildcard {
+			r.Domain = "*." + r.Domain
 		}
 		if seen[r.Domain] {
 			return fmt.Errorf("duplicate route %s", r.Domain)
@@ -176,7 +183,7 @@ func (c *Config) Validate() error {
 		seen[r.Domain] = true
 		found := false
 		for _, z := range c.DNS.Zones {
-			found = found || Within(r.Domain, z)
+			found = found || Within(strings.TrimPrefix(r.Domain, "*."), z)
 		}
 		if !found {
 			return fmt.Errorf("route %s outside configured zones", r.Domain)

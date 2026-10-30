@@ -98,7 +98,7 @@ func (c *Client) Forward(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	res, e := c.HTTP.Do(req)
 	if e != nil {
-		http.Error(w, "Management is unavailable; run raymond setup.", 503)
+		http.Error(w, "Management is unavailable; run raymond setup.", http.StatusServiceUnavailable)
 		return
 	}
 	defer res.Body.Close()

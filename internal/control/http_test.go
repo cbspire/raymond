@@ -82,3 +82,30 @@ func TestBrowserCannotMintLaunch(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 }
+
+func TestOperationRequestBoundary(t *testing.T) {
+	a, e := NewAuth(filepath.Join(t.TempDir(), "auth.json"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	b := &stubBackend{}
+	h := Handler(b, a, "owner", "proxy")
+	for _, body := range []string{
+		`{"action":"exec"}`, `{"action":"restart","path":"/etc/passwd"}`,
+		`{"action":"update","version":"https://attacker.invalid/payload"}`,
+		`{"action":"restart","revision":"unexpected"}`, `{"action":"save"}`,
+		`{"action":"restart"} {"action":"stop"}`,
+	} {
+		r := httptest.NewRequest("POST", "http://control"+Prefix+"operations", strings.NewReader(body))
+		r.Header.Set("Authorization", "Bearer owner")
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != 400 {
+			t.Fatalf("accepted %s: %d", body, w.Code)
+		}
+	}
+	if b.calls != 0 {
+		t.Fatal("invalid request reached backend")
+	}
+}

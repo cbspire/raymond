@@ -129,6 +129,10 @@ func Handler(b Backend, a *Auth, owner, proxy string) http.Handler {
 				Failure(w, e)
 				return
 			}
+			if e := validateRequest(in); e != nil {
+				Failure(w, e)
+				return
+			}
 			op, e := b.Submit(r.Context(), in)
 			if e != nil {
 				Failure(w, e)
