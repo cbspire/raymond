@@ -18,7 +18,7 @@ import (
 func setup(t *testing.T, h http.HandlerFunc) (*httptest.Server, *httptest.Server) {
 	t.Helper()
 	b := httptest.NewServer(h)
-	p := httptest.NewServer(New(router.New([]config.Installation{{Domain: "install.test", Target: strings.TrimPrefix(b.URL, "http://")}})))
+	p := httptest.NewServer(New(router.New([]config.Route{{Domain: "install.test", Target: strings.TrimPrefix(b.URL, "http://")}})))
 	t.Cleanup(b.Close)
 	t.Cleanup(p.Close)
 	return b, p
@@ -36,9 +36,9 @@ func TestPreservation(t *testing.T) {
 		if r.Header.Get("Forwarded") != "" || r.Header.Get("X-Forwarded-For") != "127.0.0.1" || r.Header.Get("X-Forwarded-Host") != r.Host || r.Header.Get("X-Forwarded-Proto") != "http" {
 			t.Errorf("forwarded headers: %v", r.Header)
 		}
-		w.Header().Add("Set-Cookie", "wordpress=one; Path=/; HttpOnly")
+		w.Header().Add("Set-Cookie", "session=one; Path=/; HttpOnly")
 		w.Header().Add("Set-Cookie", "other=two; Path=/")
-		w.Header().Set("Location", "http://DEEP.install.test/wp-admin/")
+		w.Header().Set("Location", "http://DEEP.install.test/admin/")
 		w.WriteHeader(302)
 	})
 	req, _ := http.NewRequest("POST", p.URL+"/a%2Fb/?x=1&x=2", strings.NewReader(body))
@@ -52,7 +52,7 @@ func TestPreservation(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 302 || len(resp.Header.Values("Set-Cookie")) != 2 || resp.Header.Get("Location") != "http://DEEP.install.test/wp-admin/" {
+	if resp.StatusCode != 302 || len(resp.Header.Values("Set-Cookie")) != 2 || resp.Header.Get("Location") != "http://DEEP.install.test/admin/" {
 		t.Fatal(resp.Status, resp.Header)
 	}
 }
@@ -74,7 +74,7 @@ func TestErrors(t *testing.T) {
 	}
 	addr := l.Addr().String()
 	l.Close()
-	s := httptest.NewServer(New(router.New([]config.Installation{{Domain: "install.test", Target: addr}})))
+	s := httptest.NewServer(New(router.New([]config.Route{{Domain: "install.test", Target: addr}})))
 	defer s.Close()
 	req, _ = http.NewRequest("GET", s.URL, nil)
 	req.Host = "install.test"
@@ -186,11 +186,11 @@ func TestWebSocketFrames(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer ws.Close()
-	if e = websocket.Message.Send(ws, "WordPress agent stream"); e != nil {
+	if e = websocket.Message.Send(ws, "application event stream"); e != nil {
 		t.Fatal(e)
 	}
 	var got string
-	if e = websocket.Message.Receive(ws, &got); e != nil || got != "WordPress agent stream" {
+	if e = websocket.Message.Receive(ws, &got); e != nil || got != "application event stream" {
 		t.Fatal(got, e)
 	}
 }

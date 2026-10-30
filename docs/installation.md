@@ -54,30 +54,30 @@ After start, test OS DNS rather than only querying the Raymond socket directly:
 
 ```sh
 # macOS
-dscacheutil -q host -a name site.install01.web.raymond.test
+dscacheutil -q host -a name api.app.raymond.test
 
 # Linux
-getent ahostsv4 site.install01.web.raymond.test
+getent ahostsv4 api.app.raymond.test
 ```
 
 Expect `127.0.0.42`, then make an HTTP request using the hostname:
 
 ```sh
-curl --noproxy '*' http://site.install01.web.raymond.test/
+curl --noproxy '*' http://api.app.raymond.test/
 ```
 
 For a proxy-only diagnostic that bypasses OS DNS:
 
 ```sh
-curl --noproxy '*' --resolve site.install01.web.raymond.test:80:127.0.0.42 \
-  http://site.install01.web.raymond.test/
+curl --noproxy '*' --resolve api.app.raymond.test:80:127.0.0.42 \
+  http://api.app.raymond.test/
 ```
 
 A successful direct proxy request does not establish that OS split DNS works. Use `raymond status` to inspect service state and `raymond logs` to follow live requests. `logs --lines N` changes the recent history and `logs --no-follow` exits after printing it. macOS uses `/var/log/raymond.log`; Linux uses the journal for `raymond.service` only. Request logs require the managed service binary to include the current logging implementation; rebuilds require the documented uninstall/install/start cycle to update that copy.
 
 ## Foreground development without Linux OS setup
 
-On Linux, the kernel normally makes the whole IPv4 loopback range available without adding aliases. For unprivileged foreground debugging, copy your YAML and change only:
+On Linux, the kernel normally makes the whole IPv4 loopback range available without adding aliases. For unprivileged foreground debugging, copy the example YAML to `raymond-dev.yaml` and change its listener settings:
 
 ```yaml
 dns:
@@ -87,7 +87,7 @@ proxy:
   listen: 127.0.0.42:8080
 ```
 
-Keep `version: 1` and at least the installation mapping you want to test. Validate the complete file, then run:
+Keep `version: 1` and at least the route mapping you want to test. Validate the complete file, then run:
 
 ```sh
 bin/raymond config validate --file raymond-dev.yaml
@@ -97,8 +97,8 @@ bin/raymond serve --config raymond-dev.yaml
 In another terminal:
 
 ```sh
-curl --noproxy '*' --resolve site.install01.web.test:8080:127.0.0.42 \
-  http://site.install01.web.test:8080/
+curl --noproxy '*' --resolve tenant.app.test:8080:127.0.0.42 \
+  http://tenant.app.test:8080/
 ```
 
 SIGINT or SIGTERM stops foreground serving. This does not install OS resolver routes, so use an explicit direct DNS query on port 1053 if diagnosing DNS. High ports are for foreground testing; installed integrations require 53 and 80.

@@ -16,12 +16,12 @@ jobs:
         os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           check-latest: true
-      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de
+      - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: v2.16.0
@@ -32,7 +32,7 @@ jobs:
         run: scripts/smoke.sh
       - name: Upload acceptance evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@v7
         with:
           name: raymond-acceptance-${{ runner.os }}-${{ github.run_attempt }}
           path: acceptance.log
@@ -40,7 +40,7 @@ jobs:
           retention-days: 14
       - name: Upload candidate archives
         if: runner.os == 'Linux' && success()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@v7
         with:
           name: raymond-candidate-${{ github.sha }}-${{ github.run_attempt }}
           path: |

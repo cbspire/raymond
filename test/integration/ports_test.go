@@ -22,7 +22,7 @@ func TestDedicatedPort80AndWildcardConflict(t *testing.T) {
 	httpServer := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "localhost unchanged") }), ReadHeaderTimeout: time.Second}
 	go httpServer.Serve(localhost)
 	defer httpServer.Close()
-	c := config.Config{Version: 1, DNS: config.DNS{Zones: []string{"test"}, Listen: port(t, "127.0.0.43")}, Installations: []config.Installation{{Domain: "install.test", Target: "127.0.0.1:80"}}}
+	c := config.Config{Version: 1, DNS: config.DNS{Zones: []string{"test"}, Listen: port(t, "127.0.0.43")}, Routes: []config.Route{{Domain: "install.test", Target: "127.0.0.1:80"}}}
 	if e = c.Validate(); e != nil {
 		t.Fatal(e)
 	}

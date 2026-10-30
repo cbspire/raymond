@@ -49,12 +49,12 @@ func TestDashboardPage(t *testing.T) {
 	}
 }
 
-func TestExplicitInstallationOverridesDashboard(t *testing.T) {
+func TestExplicitRouteOverridesDashboard(t *testing.T) {
 	b := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "my own app")
 	}))
 	defer b.Close()
-	h := New(router.New([]config.Installation{{Domain: "raymond.test", Target: strings.TrimPrefix(b.URL, "http://")}}))
+	h := New(router.New([]config.Route{{Domain: "raymond.test", Target: strings.TrimPrefix(b.URL, "http://")}}))
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest("GET", "http://raymond.test/", nil))
 	if w.Code != 200 || w.Body.String() != "my own app" {

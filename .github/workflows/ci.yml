@@ -13,15 +13,15 @@ jobs:
         os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           check-latest: true
       - run: test -z "$(gofmt -l cmd internal test)"
       - run: go mod tidy && git diff --exit-code -- go.mod go.sum
       - run: go vet ./...
-      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.0
       - run: go test ./...

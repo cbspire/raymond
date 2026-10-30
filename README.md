@@ -2,16 +2,16 @@
 
 Local wildcard DNS and HTTP reverse proxying in one native Go binary.
 
-Map an installation once and use as many nested site hostnames as your local app needs. Raymond preserves the original HTTP Host, path, query, cookies, redirects and streaming traffic, including WebSocket upgrades.
+Map a local app once and use as many nested site hostnames as your local app needs. Raymond preserves the original HTTP Host, path, query, cookies, redirects and streaming traffic, including WebSocket upgrades.
 
 **Current status:** v0.1 is a tested release candidate. Real macOS 15/arm64 and Ubuntu 24.04/amd64 jobs pass packaged installation, native DNS, crash/restart recovery, cleanup and offline-runtime acceptance. Candidate archives are downloadable from the PR's **Privileged OS integration** workflow artifacts. No stable GitHub release is published yet. See [validation evidence](docs/validation.md).
 
 ## What it does
 
 - Authoritative local DNS for configured private zones such as `.test` and `.internal`, with no upstream forwarding.
-- Longest hostname-suffix routing, including the installation's own hostname and arbitrarily nested subdomains.
+- Longest hostname-suffix routing, including each route's base hostname and arbitrarily nested subdomains.
 - HTTP at `127.0.0.42:80` and DNS at `127.0.0.43:53`, leaving `127.0.0.1:80` available.
-- One loopback IP/port target per installation; no registration of individual WordPress multisite blogs.
+- One loopback IP/port target per route; nested hostnames work without individual registration.
 - Explicit service installation and cleanup for macOS and supported systemd Linux systems.
 
 **One native executable, no application runtime dependencies.** Raymond includes its DNS server and HTTP proxy. It needs no Go installation, Docker, Python, Node, nginx or dnsmasq to run. Linux binaries are statically linked; macOS uses only system libraries. YAML is configuration data. Installed service/split-DNS integration uses the OS's native management tools and services, described below.
@@ -47,9 +47,9 @@ bin/raymond install
 bin/raymond config path
 ```
 
-This creates `~/.raymond/raymond.yaml` with private permissions, a dedicated `raymond.test` zone and an empty installation list. Existing settings are validated and preserved. Without sudo, `install` prepares only this user configuration.
+This creates `~/.raymond/raymond.yaml` with private permissions, a dedicated `raymond.test` zone and an empty route list. Existing settings are validated and preserved. Without sudo, `install` prepares only this user configuration.
 
-After privileged installation and service startup, [http://raymond.test](http://raymond.test) serves a small built-in dashboard landing page even with no app mappings. It is embedded in the executable, works offline and needs no extra web server. An explicit installation matching `raymond.test` takes precedence over the dashboard landing page.
+After privileged installation and service startup, [http://raymond.test](http://raymond.test) serves a small built-in dashboard landing page even with no app mappings. It is embedded in the executable, works offline and needs no extra web server. An explicit route matching `raymond.test` takes precedence over the dashboard landing page.
 
 Edit the generated file to add your local app mappings, for example:
 
@@ -60,8 +60,8 @@ dns:
   listen: 127.0.0.43:53
 proxy:
   listen: 127.0.0.42:80
-installations:
-  - domain: install01.web.raymond.test
+routes:
+  - domain: app.raymond.test
     target: 127.0.0.1:9001
 ```
 
@@ -73,13 +73,13 @@ bin/raymond config validate
 
 | Requested hostname | Backend |
 | --- | --- |
-| `install01.web.raymond.test` | `127.0.0.1:9001` |
-| `site.install01.web.raymond.test` | `127.0.0.1:9001` |
-| `dealer.eu.site.install01.web.raymond.test` | `127.0.0.1:9001` |
-| `evilinstall01.web.raymond.test` | No match |
+| `app.raymond.test` | `127.0.0.1:9001` |
+| `api.app.raymond.test` | `127.0.0.1:9001` |
+| `preview.eu.app.raymond.test` | `127.0.0.1:9001` |
+| `notapp.raymond.test` | No match |
 | `unknown.raymond.test` | DNS NXDOMAIN / HTTP 404 |
 
-A more-specific configured installation wins over a broader suffix. Comparison is case-insensitive, ignores one final DNS dot and respects label boundaries. Use ASCII labels or explicit punycode, and IPv4 loopback literal targets. See the [configuration reference](docs/configuration.md).
+A more-specific configured route wins over a broader suffix. Comparison is case-insensitive, ignores one final DNS dot and respects label boundaries. Use ASCII labels or explicit punycode, and IPv4 loopback literal targets. See the [configuration reference](docs/configuration.md).
 
 ## Install and enable OS integration
 
@@ -118,8 +118,8 @@ sudo ./bin/raymond start
 Verify through the normal OS resolver:
 
 ```sh
-curl --noproxy '*' http://site.install01.web.raymond.test/
-curl --noproxy '*' http://dealer.eu.site.install01.web.raymond.test/
+curl --noproxy '*' http://api.app.raymond.test/
+curl --noproxy '*' http://preview.eu.app.raymond.test/
 ```
 
 You should receive your app's HTTP response. `curl --resolve` can diagnose the proxy directly but does not validate OS DNS integration. See [installation details](docs/installation.md) for foreground debugging and platform-specific DNS checks.

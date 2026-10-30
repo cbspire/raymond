@@ -18,7 +18,7 @@ func TestAccessLogRecordsResponseWithoutRequestSecrets(t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte("ok"))
 	}), logger)
-	r := httptest.NewRequest("POST", "http://site.raymond.test/wp-admin/?token=query-secret", strings.NewReader("body-secret"))
+	r := httptest.NewRequest("POST", "http://site.raymond.test/admin/?token=query-secret", strings.NewReader("body-secret"))
 	r.Header.Set("Authorization", "Bearer header-secret")
 	r.Header.Set("Cookie", "session=cookie-secret")
 	w := httptest.NewRecorder()
@@ -27,7 +27,7 @@ func TestAccessLogRecordsResponseWithoutRequestSecrets(t *testing.T) {
 	if e := json.Unmarshal(output.Bytes(), &event); e != nil {
 		t.Fatal(e)
 	}
-	if event["method"] != "POST" || event["host"] != "site.raymond.test" || event["path"] != "/wp-admin/" || event["status"] != float64(201) || event["bytes"] != float64(2) {
+	if event["method"] != "POST" || event["host"] != "site.raymond.test" || event["path"] != "/admin/" || event["status"] != float64(201) || event["bytes"] != float64(2) {
 		t.Fatalf("unexpected access log: %v", event)
 	}
 	if _, ok := event["duration_ms"]; !ok {

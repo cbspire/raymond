@@ -11,7 +11,7 @@ Raymond is a tested release candidate. Stable `v0.1.0` publication remains a sep
 | Real GoReleaser archive installed as an ordinary user | Passed | Passed |
 | Go absent from runtime PATH; product built CGO_ENABLED=0 | Passed | Passed |
 | No non-system runtime libraries / static Linux ELF | Passed | Passed |
-| Native OS DNS and 10 installations / 50 concurrent hostnames | Passed | Passed |
+| Native OS DNS and 10 routes / 50 concurrent hostnames | Passed | Passed |
 | Exact backend, original Host, path, query, cookie and redirect behavior | Passed | Passed |
 | localhost:80 coexistence and wildcard-listener diagnostic | Passed | Passed |
 | Kernel inspection of exactly the dedicated loopback listeners | Passed | Passed |
@@ -23,7 +23,7 @@ Raymond is a tested release candidate. Stable `v0.1.0` publication remains a sep
 
 The native helper uses the platform's libc resolver, not a direct DNS query substituted for OS integration. If a disposable Ubuntu image begins with a foreign `resolv.conf`, the test first verifies that Raymond refuses to change it, then prepares the supported stub symlink as an explicit test fixture and restores the original file/symlink, mode and ownership at cleanup. The production installer never rewires `resolv.conf`. It is a compiled CI-only test binary; it is not shipped or needed by Raymond. The runtime PATH is an explicit whitelist of installer-native tools with no Go, Python, Node or external DNS/proxy program. Linux additionally verifies the daemon is non-root with only CAP_NET_BIND_SERVICE.
 
-The cold-start test reconstructs volatile state after stopping the service and removing owned aliases/interface. It does not claim an actual machine power-cycle. WordPress-compatible protocol behavior is exercised through representative HTTP backends; WordPress and its database are not bundled with Raymond.
+The cold-start test reconstructs volatile state after stopping the service and removing owned aliases/interface. It does not claim an actual machine power-cycle. HTTP protocol behavior is exercised through representative local backends; application servers and databases are supplied separately.
 
 ## Diagnostic measurements
 

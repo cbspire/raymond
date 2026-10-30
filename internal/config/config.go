@@ -2,6 +2,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -22,15 +23,15 @@ type Proxy struct {
 	Listen                   string `yaml:"listen"`
 	AllowWildcardCoexistence bool   `yaml:"allow_wildcard_coexistence,omitempty"`
 }
-type Installation struct {
+type Route struct {
 	Domain string `yaml:"domain"`
 	Target string `yaml:"target"`
 }
 type Config struct {
-	Version       int            `yaml:"version"`
-	DNS           DNS            `yaml:"dns"`
-	Proxy         Proxy          `yaml:"proxy"`
-	Installations []Installation `yaml:"installations"`
+	Version int     `yaml:"version"`
+	DNS     DNS     `yaml:"dns"`
+	Proxy   Proxy   `yaml:"proxy"`
+	Routes  []Route `yaml:"routes"`
 }
 
 // Normalize uses ASCII DNS labels; Unicode must be supplied as explicit punycode.
@@ -68,16 +69,42 @@ func Load(path string) (Config, error) {
 func Decode(r io.Reader) (Config, error) {
 	c := Config{}
 	d := yaml.NewDecoder(io.LimitReader(r, 1<<20))
-	d.KnownFields(true)
-	if e := d.Decode(&c); e != nil {
+	var document yaml.Node
+	if e := d.Decode(&document); e != nil {
 		return c, e
 	}
 	var extra any
 	if e := d.Decode(&extra); e != io.EOF {
 		return c, fmt.Errorf("expected exactly one YAML document")
 	}
+	normalizeRouteKeys(&document)
+	encoded, e := yaml.Marshal(&document)
+	if e != nil {
+		return c, e
+	}
+	strict := yaml.NewDecoder(bytes.NewReader(encoded))
+	strict.KnownFields(true)
+	if e := strict.Decode(&c); e != nil {
+		return c, e
+	}
 	return c, c.Validate()
 }
+
+// Normalize the pre-release key before strict decoding, including YAML merge
+// anchors. Mixed old/new keys become duplicates and are rejected by the decoder.
+func normalizeRouteKeys(node *yaml.Node) {
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if node.Content[i].Value == "installations" {
+				node.Content[i].Value = "routes"
+			}
+		}
+	}
+	for _, child := range node.Content {
+		normalizeRouteKeys(child)
+	}
+}
+
 func address(s string) (netip.Addr, error) {
 	h, p, e := net.SplitHostPort(s)
 	if e != nil {
@@ -138,13 +165,13 @@ func (c *Config) Validate() error {
 		c.DNS.Zones[i] = z
 	}
 	seen = map[string]bool{}
-	for i, r := range c.Installations {
+	for i, r := range c.Routes {
 		r.Domain, e = Normalize(r.Domain)
 		if e != nil {
-			return fmt.Errorf("installation domain: %w", e)
+			return fmt.Errorf("route domain: %w", e)
 		}
 		if seen[r.Domain] {
-			return fmt.Errorf("duplicate installation %s", r.Domain)
+			return fmt.Errorf("duplicate route %s", r.Domain)
 		}
 		seen[r.Domain] = true
 		found := false
@@ -152,15 +179,15 @@ func (c *Config) Validate() error {
 			found = found || Within(r.Domain, z)
 		}
 		if !found {
-			return fmt.Errorf("installation %s outside configured zones", r.Domain)
+			return fmt.Errorf("route %s outside configured zones", r.Domain)
 		}
 		if _, e = address(r.Target); e != nil {
 			return fmt.Errorf("target for %s: %w", r.Domain, e)
 		}
 		if r.Target == c.Proxy.Listen || r.Target == c.DNS.Listen {
-			return fmt.Errorf("installation target must not point to Raymond listeners")
+			return fmt.Errorf("route target must not point to Raymond listeners")
 		}
-		c.Installations[i] = r
+		c.Routes[i] = r
 	}
 	return nil
 }

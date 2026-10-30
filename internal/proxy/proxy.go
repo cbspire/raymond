@@ -50,7 +50,7 @@ func New(routes *router.Router) http.Handler {
 				serveDashboard(w, r)
 				return
 			}
-			http.Error(w, "Raymond: no installation for hostname", http.StatusNotFound)
+			http.Error(w, "Raymond: no route for hostname", http.StatusNotFound)
 			return
 		}
 		p.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), targetKey{}, target)))

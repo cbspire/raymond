@@ -12,18 +12,18 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const defaultUserConfig = `# Raymond user configuration. Edit installations to point to your local apps.
+const defaultUserConfig = `# Raymond user configuration. Edit routes to point to your local apps.
 version: 1
 dns:
   zones: [raymond.test]
   listen: 127.0.0.43:53
 proxy:
   listen: 127.0.0.42:80
-installations: []
+routes: []
 
-# Replace the empty installations list above with your own mappings, for example:
-# installations:
-#   - domain: install01.web.raymond.test
+# Replace the empty routes list above with your own mappings, for example:
+# routes:
+#   - domain: app.raymond.test
 #     target: 127.0.0.1:9001
 `
 

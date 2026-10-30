@@ -56,7 +56,7 @@ func installCommand(args []string) error {
 	}
 	if os.Geteuid() != 0 {
 		fmt.Printf("User configuration ready: %s\n", p)
-		fmt.Println("Edit your installation mappings, then rerun install with sudo to configure DNS and the background service. See docs/installation.md.")
+		fmt.Println("Edit your routes, then rerun install with sudo to configure DNS and the background service. See docs/installation.md.")
 		return nil
 	}
 	return install.Install(p)

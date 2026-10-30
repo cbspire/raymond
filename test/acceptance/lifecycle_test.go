@@ -171,9 +171,9 @@ func (a *apps) serve(t *testing.T, port int) *http.Server {
 		a.mu.Lock()
 		a.connections[r.RemoteAddr] = true
 		a.mu.Unlock()
-		if r.URL.Path == "/wp-login.php" {
-			http.SetCookie(w, &http.Cookie{Name: "wordpress_logged_in", Value: "acceptance", Path: "/", HttpOnly: true})
-			w.Header().Set("Location", "http://"+r.Host+"/wp-admin/")
+		if r.URL.Path == "/login" {
+			http.SetCookie(w, &http.Cookie{Name: "session_id", Value: "acceptance", Path: "/", HttpOnly: true})
+			w.Header().Set("Location", "http://"+r.Host+"/admin/")
 			w.WriteHeader(302)
 			return
 		}
@@ -202,13 +202,13 @@ func fetch(c *http.Client, host string, index int) error {
 			return fmt.Errorf("OS DNS escaped: %s -> %v", host, ips)
 		}
 	}
-	res, e := c.Get("http://" + host + "/wp-admin/?original=1")
+	res, e := c.Get("http://" + host + "/admin/?original=1")
 	if e != nil {
 		return e
 	}
 	defer res.Body.Close()
 	b, e := io.ReadAll(res.Body)
-	want := fmt.Sprintf("%d %s /wp-admin/?original=1", 9001+index%2, host)
+	want := fmt.Sprintf("%d %s /admin/?original=1", 9001+index%2, host)
 	if e != nil || res.StatusCode != 200 || string(b) != want {
 		return fmt.Errorf("%s got %s %q; want %q (%v)", host, res.Status, b, want, e)
 	}
@@ -322,7 +322,7 @@ func TestInstalledLifecycle(t *testing.T) {
 		if i >= 5 {
 			zone = "internal"
 		}
-		c.Installations = append(c.Installations, config.Installation{Domain: fmt.Sprintf("install%d.web.%s", i, zone), Target: fmt.Sprintf("127.0.0.1:%d", 9001+i%2)})
+		c.Routes = append(c.Routes, config.Route{Domain: fmt.Sprintf("install%d.web.%s", i, zone), Target: fmt.Sprintf("127.0.0.1:%d", 9001+i%2)})
 	}
 	if e = c.Validate(); e != nil {
 		t.Fatal(e)
@@ -486,7 +486,7 @@ func TestInstalledLifecycle(t *testing.T) {
 	}
 	start := time.Now()
 	var wg sync.WaitGroup
-	for i, r := range c.Installations {
+	for i, r := range c.Routes {
 		for j := 0; j < 5; j++ {
 			wg.Add(1)
 			go func(i, j int, domain string) {
@@ -499,13 +499,13 @@ func TestInstalledLifecycle(t *testing.T) {
 	}
 	wg.Wait()
 	t.Logf("50 native-OS-resolved concurrent requests: %s", time.Since(start))
-	response, e := httpClient.Get("http://first.install0.web.test/wp-login.php")
+	response, e := httpClient.Get("http://first.install0.web.test/login")
 	if e != nil {
 		t.Fatal(e)
 	}
 	response.Body.Close()
-	if response.StatusCode != 302 || response.Header.Get("Location") != "http://first.install0.web.test/wp-admin/" || len(response.Cookies()) != 1 || response.Cookies()[0].Name != "wordpress_logged_in" {
-		t.Fatal("WordPress-style redirect/cookie changed")
+	if response.StatusCode != 302 || response.Header.Get("Location") != "http://first.install0.web.test/admin/" || len(response.Cookies()) != 1 || response.Cookies()[0].Name != "session_id" {
+		t.Fatal("redirect or session cookie changed")
 	}
 	res, e := httpClient.Get("http://127.0.0.1/")
 	if e != nil {

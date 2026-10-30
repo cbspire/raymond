@@ -4,14 +4,16 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestDecode(t *testing.T) {
-	c, e := Decode(strings.NewReader("version: 1\ndns:\n  zones: [test]\ninstallations:\n  - domain: INSTALL.WEB.TEST.\n    target: 127.0.0.1:9001\n"))
+	c, e := Decode(strings.NewReader("version: 1\ndns:\n  zones: [test]\nroutes:\n  - domain: INSTALL.WEB.TEST.\n    target: 127.0.0.1:9001\n"))
 	if e != nil {
 		t.Fatal(e)
 	}
-	if c.Proxy.Listen != "127.0.0.42:80" || c.Installations[0].Domain != "install.web.test" {
+	if c.Proxy.Listen != "127.0.0.42:80" || c.Routes[0].Domain != "install.web.test" {
 		t.Fatal(c)
 	}
 }
@@ -22,7 +24,7 @@ func TestUnknownKey(t *testing.T) {
 }
 
 func TestInvalidConfigurations(t *testing.T) {
-	base := "version: 1\ndns:\n  zones: [test]\ninstallations:\n  - domain: install.web.test\n    target: 127.0.0.1:9001\n"
+	base := "version: 1\ndns:\n  zones: [test]\nroutes:\n  - domain: install.web.test\n    target: 127.0.0.1:9001\n"
 	for _, v := range []struct{ name, old, new string }{
 		{"version", "version: 1", "version: 2"},
 		{"unknown", "version: 1", "version: 1\nunknown: true"},
@@ -97,5 +99,51 @@ func TestWildcardCoexistenceIsExplicitAndMacOnly(t *testing.T) {
 		}
 	} else if e == nil {
 		t.Fatal("accepted macOS-only workaround on another platform")
+	}
+}
+
+func TestRoutesConfigKeyAndLegacyCompatibility(t *testing.T) {
+	for _, key := range []string{"routes", "installations"} {
+		document := "version: 1\ndns:\n  zones: [test]\n" + key + ":\n  - domain: app.test\n    target: 127.0.0.1:9001\n"
+		c, e := Decode(strings.NewReader(document))
+		if e != nil {
+			t.Fatalf("%s: %v", key, e)
+		}
+		if len(c.Routes) != 1 || c.Routes[0].Domain != "app.test" {
+			t.Fatalf("wrong route decoded: %+v", c)
+		}
+	}
+}
+
+func TestRouteAliasesRetainStrictValidation(t *testing.T) {
+	for _, document := range []string{
+		"version: 1\ndns:\n  zones: [test]\nroutes: []\ninstallations: []\n",
+		"version: 1\ndns:\n  zones: [test]\nroutes:\n  - domain: app.test\n    target: 127.0.0.1:9001\n    typo: true\n",
+		"version: 1\ndns:\n  zones: [test]\ninstallations:\n  - domain: app.test\n    target: 127.0.0.1:9001\n    typo: true\n",
+	} {
+		if _, e := Decode(strings.NewReader(document)); e == nil {
+			t.Fatal("accepted conflicting keys or an unknown route field")
+		}
+	}
+}
+
+func TestLegacyRouteMergeAndCanonicalOutput(t *testing.T) {
+	document := "version: 1\ndns:\n  zones: [test]\n<<: &defaults\n  installations:\n    - domain: app.test\n      target: 127.0.0.1:9001\n"
+	c, e := Decode(strings.NewReader(document))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if len(c.Routes) != 1 || c.Routes[0].Domain != "app.test" {
+		t.Fatalf("lost route from YAML merge: %+v", c)
+	}
+	encoded, e := yaml.Marshal(c)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if strings.Contains(string(encoded), "installations:") || !strings.Contains(string(encoded), "routes:") {
+		t.Fatalf("output does not use canonical routes key: %s", encoded)
+	}
+	if _, e := Decode(strings.NewReader(string(encoded))); e != nil {
+		t.Fatalf("canonical configuration does not round-trip: %v", e)
 	}
 }

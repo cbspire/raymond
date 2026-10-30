@@ -6,13 +6,13 @@ import (
 	"sort"
 )
 
-type Router struct{ routes []config.Installation }
+type Router struct{ routes []config.Route }
 
 // DashboardHost is the built-in dashboard landing page hostname, used only without a matching route.
 const DashboardHost = "raymond.test"
 
-func New(routes []config.Installation) *Router {
-	r := &Router{routes: append([]config.Installation(nil), routes...)}
+func New(routes []config.Route) *Router {
+	r := &Router{routes: append([]config.Route(nil), routes...)}
 	sort.Slice(r.routes, func(i, j int) bool { return len(r.routes[i].Domain) > len(r.routes[j].Domain) })
 	return r
 }

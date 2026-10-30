@@ -6,10 +6,10 @@ proxy:
   listen: 127.0.0.42:80
   # macOS only; retains exact bind checks while permitting an HTTP wildcard neighbor.
   # allow_wildcard_coexistence: true
-installations:
-  - domain: install01.web.test
+routes:
+  - domain: app.test
     target: 127.0.0.1:9001
-  - domain: install02.web.test
+  - domain: api.test
     target: 127.0.0.1:9002
   - domain: demo.internal
     target: 127.0.0.2:8080

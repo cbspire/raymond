@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Use stable major-version Action tags with automatic minor/patch updates.
+- Use generic application examples and a `routes` configuration key, while accepting existing user files.
+
 - Establish versioned configuration, deterministic routing and a native Go CLI.
 - Add strict normalized routing, authoritative local DNS and HTTP proxying with WebSocket/streaming support.
 - Add journaled ownership checks, platform service templates and explicit lifecycle commands.

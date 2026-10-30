@@ -53,7 +53,7 @@ func TestOfflineRuntime(t *testing.T) {
 	apps := &apps{connections: map[string]bool{}}
 	apps.serve(t, 9001)
 	configPath := filepath.Join(t.TempDir(), "offline.yaml")
-	write(t, configPath, []byte("version: 1\ndns:\n  zones: [test]\ninstallations:\n  - domain: install.test\n    target: 127.0.0.1:9001\n"), 0600)
+	write(t, configPath, []byte("version: 1\ndns:\n  zones: [test]\nroutes:\n  - domain: install.test\n    target: 127.0.0.1:9001\n"), 0600)
 	args := []string{"serve", "--config", configPath}
 	program := binary
 	if runtime.GOOS == "darwin" {
@@ -94,7 +94,7 @@ func TestOfflineRuntime(t *testing.T) {
 		if answer.Rcode != 0 || !answer.Authoritative || len(answer.Answer) != 1 || answer.Answer[0].(*mdns.A).A.String() != "127.0.0.42" {
 			return fmt.Errorf("incorrect authoritative offline answer: %v", answer)
 		}
-		req, e := http.NewRequest("GET", "http://127.0.0.42/wp-admin/?original=1", nil)
+		req, e := http.NewRequest("GET", "http://127.0.0.42/admin/?original=1", nil)
 		if e != nil {
 			return e
 		}

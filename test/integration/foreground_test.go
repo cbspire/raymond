@@ -30,7 +30,7 @@ func port(t *testing.T, ip string) string {
 func TestForegroundDNSAndHTTP(t *testing.T) {
 	b := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, r.Host+" "+r.URL.RequestURI()) }))
 	defer b.Close()
-	c := config.Config{Version: 1, DNS: config.DNS{Zones: []string{"test", "internal"}, Listen: "127.0.0.43:53"}, Proxy: config.Proxy{Listen: "127.0.0.42:80"}, Installations: []config.Installation{{Domain: "install.web.test", Target: strings.TrimPrefix(b.URL, "http://")}}}
+	c := config.Config{Version: 1, DNS: config.DNS{Zones: []string{"test", "internal"}, Listen: "127.0.0.43:53"}, Proxy: config.Proxy{Listen: "127.0.0.42:80"}, Routes: []config.Route{{Domain: "install.web.test", Target: strings.TrimPrefix(b.URL, "http://")}}}
 	if e := c.Validate(); e != nil {
 		t.Fatal(e)
 	}
@@ -68,7 +68,7 @@ func TestForegroundDNSAndHTTP(t *testing.T) {
 			t.Fatalf("%s: %v %v", network, res, e)
 		}
 	}
-	req, _ := http.NewRequest("GET", "http://"+c.Proxy.Listen+"/wp-admin/?x=1", nil)
+	req, _ := http.NewRequest("GET", "http://"+c.Proxy.Listen+"/admin/?x=1", nil)
 	req.Host = "deep.site.install.web.test"
 	client := &http.Client{Transport: &http.Transport{Proxy: nil}, Timeout: 2 * time.Second}
 	res, e := client.Do(req)
@@ -77,7 +77,7 @@ func TestForegroundDNSAndHTTP(t *testing.T) {
 	}
 	defer res.Body.Close()
 	body, _ := io.ReadAll(res.Body)
-	if string(body) != "deep.site.install.web.test /wp-admin/?x=1" {
+	if string(body) != "deep.site.install.web.test /admin/?x=1" {
 		t.Fatalf("%s", body)
 	}
 }
@@ -94,7 +94,7 @@ func TestConcurrentFiftyHosts(t *testing.T) {
 		if i >= 5 {
 			zone = "internal"
 		}
-		c.Installations = append(c.Installations, config.Installation{Domain: fmt.Sprintf("install%d.web.%s", i, zone), Target: strings.TrimPrefix(b.URL, "http://")})
+		c.Routes = append(c.Routes, config.Route{Domain: fmt.Sprintf("install%d.web.%s", i, zone), Target: strings.TrimPrefix(b.URL, "http://")})
 	}
 	if e := c.Validate(); e != nil {
 		t.Fatal(e)
@@ -126,10 +126,10 @@ func TestConcurrentFiftyHosts(t *testing.T) {
 	client := &http.Client{Transport: transport, Timeout: 3 * time.Second}
 	start := time.Now()
 	var wg sync.WaitGroup
-	for i, r := range c.Installations {
+	for i, r := range c.Routes {
 		for j := 0; j < 5; j++ {
 			wg.Add(1)
-			go func(i, j int, r config.Installation) {
+			go func(i, j int, r config.Route) {
 				defer wg.Done()
 				host := fmt.Sprintf("deep.site%d.%s", j, r.Domain)
 				q := new(mdns.Msg)
@@ -139,7 +139,7 @@ func TestConcurrentFiftyHosts(t *testing.T) {
 					t.Errorf("DNS %s: %v", host, e)
 					return
 				}
-				req, _ := http.NewRequest("GET", "http://"+c.Proxy.Listen+"/wp-admin/?original=1", nil)
+				req, _ := http.NewRequest("GET", "http://"+c.Proxy.Listen+"/admin/?original=1", nil)
 				req.Host = host
 				res, e := client.Do(req)
 				if e != nil {
@@ -148,7 +148,7 @@ func TestConcurrentFiftyHosts(t *testing.T) {
 				}
 				defer res.Body.Close()
 				b, e := io.ReadAll(res.Body)
-				want := fmt.Sprintf("%d %s /wp-admin/?original=1", i, host)
+				want := fmt.Sprintf("%d %s /admin/?original=1", i, host)
 				if e != nil || string(b) != want {
 					t.Errorf("%s: got %q want %q (%v)", host, b, want, e)
 				}

@@ -19,7 +19,7 @@ func New(c config.Config) *Handler {
 	ip, _, _ := net.SplitHostPort(c.Proxy.Listen)
 	zones := append([]string(nil), c.DNS.Zones...)
 	sort.Slice(zones, func(i, j int) bool { return len(zones[i]) > len(zones[j]) })
-	return &Handler{zones: zones, routes: router.New(c.Installations), ip: net.ParseIP(ip).To4()}
+	return &Handler{zones: zones, routes: router.New(c.Routes), ip: net.ParseIP(ip).To4()}
 }
 func (h *Handler) ServeDNS(w mdns.ResponseWriter, q *mdns.Msg) {
 	m := new(mdns.Msg)

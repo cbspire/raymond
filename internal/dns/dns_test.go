@@ -8,7 +8,7 @@ import (
 )
 
 func TestAnswers(t *testing.T) {
-	c := config.Config{Version: 1, DNS: config.DNS{Zones: []string{"test", "internal"}}, Installations: []config.Installation{{Domain: "install.web.test", Target: "127.0.0.1:9001"}, {Domain: "demo.internal", Target: "127.0.0.1:9002"}}}
+	c := config.Config{Version: 1, DNS: config.DNS{Zones: []string{"test", "internal"}}, Routes: []config.Route{{Domain: "install.web.test", Target: "127.0.0.1:9001"}, {Domain: "demo.internal", Target: "127.0.0.1:9002"}}}
 	if e := c.Validate(); e != nil {
 		t.Fatal(e)
 	}
