@@ -4,7 +4,7 @@
 > **Tagline:** Elegant. Resourceful. Always in control.  
 > **Goal:** A self-contained, open-source local wildcard DNS and HTTP reverse-proxy manager for macOS and Linux.  
 > **Implementation language:** Go.  
-> **Release scope:** v0.1.0 = DNS + HTTP proxy only. **HTTPS is explicitly deferred to v0.2.0.**
+> **Release scope:** 0.1.0 = DNS + HTTP proxy only. **HTTPS is explicitly deferred to 0.2.0.**
 
 ## 1. Codex operating instructions
 
@@ -243,7 +243,7 @@ Do not create empty scaffolding files with TODO-only content. Add them together 
 - Documentation with reproducible first-run instructions and simple troubleshooting.
 - Acceptance: a fresh macOS or Linux machine can download a released archive, install, configure and remove Raymond without Go installed.
 
-### M6 — Release candidate and v0.1.0
+### M6 — Release candidate and 0.1.0
 
 - Run a 10-route/50-hostname fixture on macOS; ensure the backend receives the correct `Host`.
 - Test concurrent agent HTTP requests and keep-alive; measure latency/RSS for diagnostic purposes only, no invented throughput SLA.
@@ -253,7 +253,7 @@ Do not create empty scaffolding files with TODO-only content. Add them together 
 ## 6. Git and collaboration policy
 
 - Default branch `main`; short-lived feature branches `feat/...`, `fix/...`, `docs/...`, `ci/...`. Use PRs, squash merge, and a linear history. No direct push to protected `main`.
-- Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `ci:`, `chore:`). Semantic versioning (`v0.1.0` tag; preserve `v` in releases). Release notes generated from conventional commits and reviewed before publishing.
+- Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `ci:`, `chore:`). Semantic versioning (`0.1.0` tag; omit the `v` prefix in release tags). Release notes generated from conventional commits and reviewed before publishing.
 - PR description must state purpose, design choice, risk, tests executed, docs changes and screenshots/logs if OS integration changes. Avoid unrelated formatting/refactors.
 - Required checks on `main`: format, `go vet`, lint, unit tests + race detector, integration tests, vulnerability scan, build matrix. Enable branch protection or a repository ruleset and required status checks through repository settings.
 - Enable Dependabot for Go modules and GitHub Actions, weekly updates, grouping minor/patch dependencies. Enable secret scanning where available. Use `CODEOWNERS` for security-critical `internal/platform`, `internal/install`, and `.github/workflows`.
@@ -328,7 +328,7 @@ Installer acceptance:
 
 1. `#!/usr/bin/env bash`, `set -euo pipefail`; support Bash versions shipped with macOS. No `jq` or Go requirement.
 2. Detect OS via `uname -s` and arch via `uname -m` (`arm64`/`aarch64`, `x86_64`/`amd64`); reject unsupported platforms.
-3. Support pinned version via `RAYMOND_VERSION=v0.1.0`; default to stable latest GitHub Release only when online.
+3. Support pinned version via `RAYMOND_VERSION=0.1.0`; default to stable latest GitHub Release only when online.
 4. Download archive and `checksums.txt` from the **same immutable release tag** via HTTPS. Validate exact archive filename and SHA-256 using `shasum -a 256` on macOS or `sha256sum` on Linux. Fail if mismatch; never execute a downloaded archive before verification.
 5. Use `mktemp -d`, `trap` cleanup, `tar` path validation and no arbitrary pathname extraction into privileged directories. Do not use `eval` or execute GitHub API payloads.
 6. Install atomically to `~/.local/bin/raymond` by default, without sudo. Expose `RAYMOND_INSTALL_DIR` for overrides, validate the path and provide a PATH hint. The OS service installer must know the chosen trusted absolute executable path and enforce ownership/permission checks.
@@ -368,7 +368,7 @@ Before release, update `OWNER` to the repository owner in README, script and CI;
 
 **Completion criteria:** installation and cleanup tested on real supported OS versions; all required checks green; docs include actual copy/paste commands for an existing local HTTP app; release binary can be downloaded and run without Go; no functionality implemented outside v0.1 scope.
 
-## 10. Deferred v0.2.0: HTTPS — do not implement in v0.1
+## 10. Deferred 0.2.0: HTTPS — do not implement in v0.1
 
 - Enable TLS at `127.0.0.42:443`, leaving `127.0.0.1:443` untouched.
 - Create a local root CA with secure private-key storage and explicit trust/untrust commands on macOS and Linux.

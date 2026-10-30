@@ -1,6 +1,6 @@
 # v0.1 acceptance evidence
 
-Raymond is a tested release candidate. Stable `v0.1.0` publication remains a separate review/tagging action; no stable release has been published by this task. All product artifacts contain one native executable plus README/LICENSE. The DNS server and HTTP proxy are built into that executable.
+Release `0.1.0` uses the native acceptance and publication checks described below. All product artifacts contain one native executable plus README/LICENSE. The DNS server and HTTP proxy are built into that executable.
 
 ## Native M4–M6 acceptance
 
@@ -40,16 +40,16 @@ The referenced run measured 50 native-OS-resolved concurrent requests at about 2
 - `govulncheck` passes using the patched Go 1.26.10 minimum. CodeQL is conditional on repository support: private repositories opt in using `RAYMOND_CODEQL_ENABLED=true` after enabling code scanning. Otherwise its job is explicitly skipped and the summary explains the missing coverage.
 - Pinned actionlint and shell syntax checks pass. Four GoReleaser archives and SHA-256 manifests are built for darwin/linux × amd64/arm64. Native acceptance covers darwin/arm64 and linux/amd64; the other two targets are cross-built.
 
-## Distribution and remaining release actions
+## Distribution and release checks
 
 The **Privileged OS integration** workflow uploads candidate archives, checksums, metadata, installer and configuration/docs. Its immutable artifact names include the tested Git SHA; evidence logs are uploaded per OS. Artifacts expire after 14 days. Candidate versions are `0.1.0-rc.g<commit>`, while final tagged releases use their actual version.
 
-The owner still needs to review/merge the PR and authorize the release tag/publication. Repository branch/tag protections, environment approval rules, dependency/secret scanning and optional artifact signing/attestation are settings or release-policy actions, not automatically enabled by source files. The release workflow requires CI, security and native OS acceptance before its publication job. GitHub's `release` environment should be configured with the owner's approval policy before publishing.
+Release tags use plain semantic versions, such as `0.1.0`, without a `v` prefix. Repository branch/tag protections, environment approval rules, dependency/secret scanning and optional artifact signing/attestation are settings or release-policy actions, not automatically enabled by source files. The release workflow requires CI, security and native OS acceptance before its publication job, followed by any approval rules configured on GitHub's `release` environment.
 
 Linux integration currently requires already-active systemd-networkd/systemd-resolved and the resolved stub symlink. Other Linux resolver arrangements fail closed. macOS's installed daemon runs as root for privileged ports and alias reconstruction; privilege isolation remains future hardening. No HTTPS, certificates or trust-store changes are included in v0.1.
 
 ## Local setup and dashboard changes
 
-The current PR extends native acceptance to initialize and preserve the ordinary user's private configuration, install directly from the invoking user's downloaded executable, serve the embedded dashboard through native DNS, and read HTTP access events through `raymond logs`. The historical run linked above covers the original M4–M6 baseline; use the [current PR checks](https://github.com/cbspire/raymond/pull/1/checks) for evidence against the latest branch commit.
+Native acceptance also covers initializing and preserving the ordinary user's private configuration, installing directly from the invoking user's downloaded executable, serving the embedded dashboard through native DNS, and reading HTTP access events through `raymond logs`. The historical run linked above covers the original M4–M6 baseline; the [merged feature PR checks](https://github.com/cbspire/raymond/pull/1/checks) cover these additions. Release runs validate the exact tagged commit again.
 
 Local macOS 27/arm64 checks also verified the opt-in Docker wildcard coexistence: independent responses on separate loopback addresses with either startup order, followed by an installed daemon returning HTTP 200 at `raymond.test` while Docker/Traefik remained reachable on localhost. This is supplemental workstation evidence, not a replacement for the disposable macOS/Linux lifecycle jobs.

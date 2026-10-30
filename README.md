@@ -4,7 +4,7 @@ Local wildcard DNS and HTTP reverse proxying in one native Go binary.
 
 Map a local app once and use as many nested site hostnames as your local app needs. Raymond preserves the original HTTP Host, path, query, cookies, redirects and streaming traffic, including WebSocket upgrades.
 
-**Current status:** v0.1 is a tested release candidate. Real macOS 15/arm64 and Ubuntu 24.04/amd64 jobs pass packaged installation, native DNS, crash/restart recovery, cleanup and offline-runtime acceptance. Candidate archives are downloadable from the PR's **Privileged OS integration** workflow artifacts. No stable GitHub release is published yet. See [validation evidence](docs/validation.md).
+**Release 0.1.0:** native macOS 15/arm64 and Ubuntu 24.04/amd64 acceptance covers packaged setup, native DNS, crash/restart recovery, cleanup and offline runtime. Download published binaries from [GitHub Releases](https://github.com/cbspire/raymond/releases), or build from source below. See [validation evidence](docs/validation.md).
 
 ## What it does
 
@@ -18,17 +18,13 @@ Map a local app once and use as many nested site hostnames as your local app nee
 
 **HTTP only.** HTTPS, certificates and trust-store changes are deferred to v0.2. There is no caching, compression, rewriting, management dashboard or remote-control API. `.local` is rejected because it conflicts with mDNS/Bonjour. Local processes can reach the proxy; loopback is not an authentication boundary.
 
-## Build the current candidate
+## Build from source
 
 Development needs Git, Make and **Go 1.26.10 or a later compatible patched toolchain**. The compiled binary does not require Go or another language runtime.
 
 ```sh
 git clone https://github.com/cbspire/raymond.git
 cd raymond
-
-# Until PR #1 is merged, check out the candidate for review:
-git fetch origin pull/1/head
-git switch --detach FETCH_HEAD
 
 make build
 bin/raymond version
@@ -151,23 +147,23 @@ For a config change or binary upgrade, **uninstall with the existing binary firs
 
 ## Install a released binary
 
-**Future release path:** these commands require an existing `v0.1.0` release and will not work before it is published. Check [GitHub Releases](https://github.com/cbspire/raymond/releases) first. Source builds above are the current evaluation path.
+These commands install release `0.1.0` from [GitHub Releases](https://github.com/cbspire/raymond/releases/tag/0.1.0). Release tags use plain semantic versions without a `v` prefix.
 
 Prefer downloading and inspecting the installer before running it:
 
 ```sh
 curl --proto '=https' --proto-redir '=https' -fsSL \
-  https://raw.githubusercontent.com/cbspire/raymond/v0.1.0/scripts/install.sh \
+  https://raw.githubusercontent.com/cbspire/raymond/0.1.0/scripts/install.sh \
   -o install-raymond.sh
 less install-raymond.sh
-RAYMOND_VERSION=v0.1.0 bash install-raymond.sh
+RAYMOND_VERSION=0.1.0 bash install-raymond.sh
 export PATH="$HOME/.local/bin:$PATH"
 raymond version
 ```
 
 The script detects macOS/Linux and amd64/arm64, downloads the archive and SHA-256 manifest from the same immutable release tag, verifies the checksum and archive contents, checks that the binary runs, then atomically installs it to `~/.local/bin/raymond`. It never invokes sudo or changes DNS/services. Checksums provide integrity, not independent signing/provenance.
 
-Pinned candidate versions such as `v0.1.0-rc.g<commit>` are also accepted. Use `RAYMOND_ARCHIVE_DIR=/absolute/path/to/dist` to install already-downloaded candidate archives without curl or network access; a pinned version is required in that mode. Omit `RAYMOND_VERSION` in online mode to select the latest stable release. Override the user binary directory with an absolute `RAYMOND_INSTALL_DIR`, for example `RAYMOND_INSTALL_DIR="$HOME/bin"`. Directory and symlink destinations are refused. To enable OS integration, review the downloaded binary, substitute `"$HOME/.local/bin/raymond"` for `./bin/raymond` in the service setup commands above, and follow the same explicit setup steps.
+Pinned candidate versions such as `0.1.0-rc.g<commit>` are also accepted. Use `RAYMOND_ARCHIVE_DIR=/absolute/path/to/dist` to install already-downloaded candidate archives without curl or network access; a pinned version is required in that mode. Omit `RAYMOND_VERSION` in online mode to select the latest stable release. Override the user binary directory with an absolute `RAYMOND_INSTALL_DIR`, for example `RAYMOND_INSTALL_DIR="$HOME/bin"`. Directory and symlink destinations are refused. To enable OS integration, review the downloaded binary, substitute `"$HOME/.local/bin/raymond"` for `./bin/raymond` in the service setup commands above, and follow the same explicit setup steps.
 
 ## Develop and validate
 

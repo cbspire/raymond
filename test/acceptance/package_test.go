@@ -68,7 +68,7 @@ func candidate(t *testing.T) string {
 	if _, e = exec.LookPath("go"); e == nil {
 		t.Fatal("Go unexpectedly available in runtime PATH")
 	}
-	out := must(t, nativePath("sudo"), "-H", "-u", testUser, "--", nativePath("env"), "PATH="+os.Getenv("PATH"), "TMPDIR="+dir, "RAYMOND_ARCHIVE_DIR="+assets, "RAYMOND_VERSION=v"+metadata.Version, "RAYMOND_INSTALL_DIR="+dir, nativePath("bash"), script)
+	out := must(t, nativePath("sudo"), "-H", "-u", testUser, "--", nativePath("env"), "PATH="+os.Getenv("PATH"), "TMPDIR="+dir, "RAYMOND_ARCHIVE_DIR="+assets, "RAYMOND_VERSION="+metadata.Version, "RAYMOND_INSTALL_DIR="+dir, nativePath("bash"), script)
 	t.Logf("native packaged binary installed without Go: %s", strings.TrimSpace(string(out)))
 	binary := filepath.Join(dir, "raymond")
 	st, e := os.Stat(binary)
