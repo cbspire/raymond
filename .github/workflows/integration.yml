@@ -1,0 +1,56 @@
+name: Privileged OS integration
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  smoke:
+    environment: platform-validation
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: v2.16.0
+          args: release --snapshot --clean
+      - name: Reviewed disposable-runner OS lifecycle
+        env:
+          RAYMOND_PRIVILEGED_SMOKE: '1'
+        run: scripts/smoke.sh
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: raymond-acceptance-${{ runner.os }}-${{ github.run_attempt }}
+          path: acceptance.log
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload candidate archives
+        if: runner.os == 'Linux' && success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: raymond-candidate-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+            dist/metadata.json
+            scripts/install.sh
+            README.md
+            docs/installation.md
+            examples/raymond.yaml
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

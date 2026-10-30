@@ -18,7 +18,7 @@ You are the implementation engineer for a new open-source Go repository named `r
 4. Do **not** occupy `127.0.0.1:80`, `127.0.0.1:443`, `0.0.0.0:80` or `0.0.0.0:443`.
 5. All proxies bind to a **dedicated loopback address**, default `127.0.0.42:80`. DNS binds to a different loopback address, default `127.0.0.43:53`. Avoid `127.0.0.53`/`.54` on Linux: these may be used by `systemd-resolved`.
 6. Supports multiple private DNS zones (`test`, `internal`, etc.) with arbitrarily nested hostnames. `.local` must be disabled or warned against by default because it collides with mDNS/Bonjour.
-7. Maps installations by the longest matching hostname suffix, with one configurable backend IP and port per installation. Preserve `Host` and the original URL/path/query.
+7. Routes hostnames by the longest matching suffix, with one configurable backend IP and port per route. Preserve `Host` and the original URL/path/query.
 8. In v0.1, terminate **HTTP only**. No HTTPS, certificate authority, compression, caching, rewriting, custom rules, dashboard, Docker requirement, external DNS or remote-control HTTP API.
 9. Fully offline at runtime. `curl` is required only by the remote installer; Raymond itself performs no outbound network requests.
 10. Installer must be safe, reproducible, idempotent, and reversible. Do not silently overwrite other developers' resolver files or networking settings.
@@ -39,11 +39,11 @@ dns:
 proxy:
   listen: 127.0.0.42:80
 
-installations:
-  - domain: install01.web.test
+routes:
+  - domain: app.test
     target: 127.0.0.1:9001
 
-  - domain: install02.web.test
+  - domain: api.test
     target: 127.0.0.1:9002
 
   - domain: demo.internal
@@ -54,16 +54,16 @@ Expected routes:
 
 | Requested URL | Target |
 | --- | --- |
-| `http://site1.install01.web.test/` | `127.0.0.1:9001` |
-| `http://site2.install01.web.test/wp-admin/` | `127.0.0.1:9001` |
-| `http://site3.install02.web.test/` | `127.0.0.1:9002` |
-| `http://dealer.eu.site3.install02.web.test/` | `127.0.0.1:9002` |
+| `http://tenant.app.test/` | `127.0.0.1:9001` |
+| `http://preview.app.test/admin/` | `127.0.0.1:9001` |
+| `http://tenant.api.test/` | `127.0.0.1:9002` |
+| `http://preview.eu.api.test/` | `127.0.0.1:9002` |
 | `http://demo.internal/` | `127.0.0.2:8080` |
 | `http://unknown.test/` | Raymond HTTP `404`, not an arbitrary backend |
 
-The root host `install01.web.test` also routes to its installation. A more-specific installation suffix wins if both `web.test` and `install01.web.test` are explicitly configured. Domain comparison must be normalized (case-insensitive, trailing dot ignored), and suffix matching must respect label boundaries: `evilinstall01.web.test` must **not** match `install01.web.test`.
+The root host `app.test` also routes to its backend. A more-specific route suffix wins if both `test` and `app.test` are explicitly configured. Domain comparison must be normalized (case-insensitive, trailing dot ignored), and suffix matching must respect label boundaries: `notapp.test` must **not** match `app.test`.
 
-Users should not register individual WordPress multisite blogs in Raymond. Adding a new site only changes WordPress, not Raymond.
+Users configure a base domain once. New subdomains route to the same backend without further Raymond configuration.
 
 Command-line design:
 
@@ -91,7 +91,7 @@ No `raymond add domain ...` CRUD API for v0.1; editing YAML is sufficient. A con
 - `internal/config`: YAML parsing (`gopkg.in/yaml.v3`), defaults, validation and safe loading.
 - `internal/router`: deterministic hostname normalization, longest-suffix matching, backend selection.
 - `internal/dns`: minimal authoritative DNS resolver using `github.com/miekg/dns`; support A and AAAA (return A for matching names; return NOERROR/NODATA for unsupported AAAA when IPv6 proxy is unavailable); no upstream forwarding in v0.1.
-- `internal/proxy`: Go `net/http` + `net/http/httputil.ReverseProxy`; HTTP/1.1 and WebSocket upgrades; preserve Host, method, path, raw query, redirects, streaming, and WordPress cookies.
+- `internal/proxy`: Go `net/http` + `net/http/httputil.ReverseProxy`; HTTP/1.1 and WebSocket upgrades; preserve Host, method, path, raw query, redirects, streaming, and application cookies.
 - `internal/platform/darwin`: macOS loopback alias lifecycle, `/etc/resolver/<zone>` management, `launchd` lifecycle.
 - `internal/platform/linux`: loopback support and `systemd-resolved` route-only DNS integration; `systemd` service installation.
 - `internal/install`: executable/data installation and cleanup, conflict checks, rollback, backup handling.
@@ -102,8 +102,8 @@ Use interfaces where needed for testability, not a generic plugin system. Avoid 
 ### 3.2 DNS
 
 - Raymond is authoritative only for its configured private zones; the OS resolver routes those zones to Raymond using split DNS. All other queries remain handled by the existing system resolver.
-- For names belonging to a configured zone, answer A with `127.0.0.42` when the hostname matches a configured installation; for unknown names, prefer NXDOMAIN. This prevents accidental interception of unrelated local hostnames while retaining wildcard matches for all multisite blogs.
-- Decide whether the installation's apex hostname is a valid match (yes); handle deeply nested names. Reject invalid DNS labels, duplicate routes, ambiguous targets and domain-to-zone mismatches.
+- For names belonging to a configured zone, answer A with `127.0.0.42` when the hostname matches a configured route; for unknown names, prefer NXDOMAIN. This prevents accidental interception of unrelated local hostnames while retaining wildcard matches for all nested hostnames.
+- Decide whether the route's base hostname is a valid match (yes); handle deeply nested names. Reject invalid DNS labels, duplicate routes, ambiguous targets and domain-to-zone mismatches.
 - DNS query handling must be bounded, race-safe and minimally allocated; no network access to upstream resolvers.
 - Default localhost-only interfaces; refuse to bind public/LAN addresses unless a future explicit feature is added.
 - Ensure resolver files target `127.0.0.43`, and use port `53` initially for maximum OS compatibility. Consider an unprivileged custom port **only if both OS integrations are proven end-to-end**; do not assume Linux and macOS support it identically.
@@ -112,12 +112,12 @@ Use interfaces where needed for testability, not a generic plugin system. Avoid 
 
 - Bind exactly `127.0.0.42:80`; never bind `:80`/`0.0.0.0:80`.
 - Create one ReverseProxy with a per-request selected backend, rather than a listener per hostname/site.
-- Preserve the original `Host` in upstream requests, since WordPress multisite depends on it.
+- Preserve the original `Host` in upstream requests, so applications can route by hostname.
 - Only overwrite/set forwarding headers according to an explicit trust policy; discard untrusted client-supplied `Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`, and `X-Forwarded-Proto` before inserting known-good values. v0.1 sets `X-Forwarded-Proto: http`.
-- Use conservative timeouts for dial, response-header wait and idle connection; **do not enforce a short total request timeout** because imports, WordPress admin and agents can run longer.
+- Use conservative timeouts for dial, response-header wait and idle connection; **do not enforce a short total request timeout** because imports, administrative requests and background jobs can run longer.
 - Support streaming, large POST bodies, WebSocket upgrade, `Location`, cookies and `Set-Cookie` without rewriting by default. Do not add gzip, cache, redirects or custom headers except essential forwarding headers.
 - Return useful `404` for unmatched hostnames, `502` when a backend is unreachable, and logs without secrets.
-- Restrict installation targets to IP literals (IPv4 loopback by default). Explicitly validate any broader address support before allowing it: Raymond should not become a general SSRF-capable LAN proxy.
+- Restrict route targets to IP literals (IPv4 loopback by default). Explicitly validate any broader address support before allowing it: Raymond should not become a general SSRF-capable LAN proxy.
 
 ### 3.4 Platform integration and privilege model
 
@@ -209,8 +209,8 @@ Do not create empty scaffolding files with TODO-only content. Add them together 
 
 - Parse schema with strict validation; reject unknown keys to catch typos.
 - Normalization: case-insensitive, remove final DNS dot, IDNA/punycode decision documented, enforce DNS label boundaries.
-- Longest-suffix matcher; explicit valid apex behavior; 10 installation/50 host fixture.
-- Table-driven and property/fuzz tests including lookalike suffixes, invalid config, duplicate domains, overlapping installations.
+- Longest-suffix matcher; explicit valid apex behavior; 10 routes/50 host fixture.
+- Table-driven and property/fuzz tests including lookalike suffixes, invalid config, duplicate domains, overlapping routes.
 - Acceptance: all routes work without running DNS or proxy.
 
 ### M2 — HTTP reverse proxy
@@ -218,12 +218,12 @@ Do not create empty scaffolding files with TODO-only content. Add them together 
 - Dynamic backend selection per request; preserve original Host.
 - Unit/integration tests using `httptest`, streaming, large POST, redirects, cookies, WebSockets, unknown hosts, down backends and connection reuse.
 - A foreground test server must be able to listen on an unprivileged port for CI without root.
-- Acceptance: `curl --resolve site.install01.web.test:80:127.0.0.42 http://site.install01.web.test/` reaches the correct backend when the installed proxy is running. Unit tests should use an alternate test listen port instead of privileged 80.
+- Acceptance: `curl --resolve tenant.app.test:80:127.0.0.42 http://tenant.app.test/` reaches the correct backend when the installed proxy is running. Unit tests should use an alternate test listen port instead of privileged 80.
 
 ### M3 — Authoritative local DNS
 
 - A/AAAA resolution with `miekg/dns`; zone boundary checks; no forwarding.
-- Tests for `site.install01.web.test`, deep names, multiple configured zones, unknown hosts, AAAA and non-A types.
+- Tests for `tenant.app.test`, deep names, multiple configured zones, unknown hosts, AAAA and non-A types.
 - Integration tests use configurable high DNS port on loopback; platform installation later uses real port 53.
 - Acceptance: test resolver queries return Raymond proxy address only for valid matched hostnames.
 
@@ -245,7 +245,7 @@ Do not create empty scaffolding files with TODO-only content. Add them together 
 
 ### M6 — Release candidate and v0.1.0
 
-- Run a 10-installation/50-hostname fixture on macOS; ensure WordPress receives the correct `Host`.
+- Run a 10-route/50-hostname fixture on macOS; ensure the backend receives the correct `Host`.
 - Test concurrent agent HTTP requests and keep-alive; measure latency/RSS for diagnostic purposes only, no invented throughput SLA.
 - Validate localhost:80 is unaffected, loopback-only exposure, OS restoration, error paths and no external runtime traffic.
 - Publish only once all required CI and OS integration checks pass.
@@ -258,7 +258,7 @@ Do not create empty scaffolding files with TODO-only content. Add them together 
 - Required checks on `main`: format, `go vet`, lint, unit tests + race detector, integration tests, vulnerability scan, build matrix. Enable branch protection or a repository ruleset and required status checks through repository settings.
 - Enable Dependabot for Go modules and GitHub Actions, weekly updates, grouping minor/patch dependencies. Enable secret scanning where available. Use `CODEOWNERS` for security-critical `internal/platform`, `internal/install`, and `.github/workflows`.
 - Restrict workflows' `GITHUB_TOKEN` permissions to `contents: read`; only the release job gets `contents: write` and, if signing, `id-token: write`. Do not expose write tokens to untrusted PRs.
-- Pin GitHub Actions to reviewed full commit SHAs and automate update PRs with Dependabot. Major tags are acceptable during initial scaffolding but should not remain unpinned for a security-sensitive installer project.
+- Use current stable major-version tags for GitHub Actions (for example, `actions/checkout@v7`). These tags receive minor and patch updates automatically; Dependabot proposes new major versions for review.
 - Signing and GitHub attestation of release artifacts are recommended before public distribution; checksum alone does not authenticate an artifact if the source of the checksum is compromised.
 
 ## 7. Complete CI/CD specification
@@ -280,7 +280,7 @@ Do not create empty scaffolding files with TODO-only content. Add them together 
 - Start disposable localhost backend listeners on ports 9001 and 9002.
 - Test a real Raymond `127.0.0.42:80` proxy while a separate preexisting `127.0.0.1:80` listener remains responsive.
 - Validate private-zone DNS resolution from OS APIs, not just direct `dig` to the Raymond DNS socket.
-- Test an installation whose suffix is `install.web.test` and clients `site.install.web.test`, `deep.site.install.web.test`.
+- Test a route whose suffix is `app.test` and clients `tenant.app.test`, `deep.tenant.app.test`.
 - Test `install`, `stop`, `uninstall` cleanup and make sure unrelated `/etc/resolver` or systemd config is unmodified.
 - Use `trap` cleanup even when a test fails. If a hosted runner cannot support system-level tests, use dedicated ephemeral macOS/Linux runners rather than marking these tests as passing.
 
@@ -294,7 +294,7 @@ Do not create empty scaffolding files with TODO-only content. Add them together 
 
 ### 7.4 `.github/workflows/release.yml` (protected tags `v*`)
 
-- `checkout` with full git history, set up Go, run tests and GoReleaser v2 through `goreleaser/goreleaser-action@v7` (or current pinned release).
+- `checkout` with full git history, set up Go, run tests and GoReleaser v2 through `goreleaser/goreleaser-action@v7` (or the current stable major tag).
 - Build native binaries, e.g. archives:
   - `raymond_0.1.0_darwin_arm64.tar.gz`
   - `raymond_0.1.0_darwin_amd64.tar.gz`
@@ -344,19 +344,19 @@ Before release, update `OWNER` to the repository owner in README, script and CI;
 
 | Scenario | Expected |
 | --- | --- |
-| `site.install.web.test` | Correct installation target |
-| `deep.site.install.web.test` | Same installation target |
-| `install.web.test` | Same installation target |
-| `site.other.web.test` | Other installation only if configured |
+| `tenant.app.test` | Correct route target |
+| `deep.tenant.app.test` | Same route target |
+| `app.test` | Same route target |
+| `site.other.web.test` | Other route only if configured |
 | Hostname lookalikes | No false suffix match |
-| 10 installations / 50 sites | Deterministic correct routes |
+| 10 routes / 50 sites | Deterministic correct routes |
 | `*.test` and `*.internal` | Scoped DNS works for both zones |
 | `.local` | Warn/disable by default |
 | Backend down | Clean 502 |
 | Unknown hostname | NXDOMAIN at DNS or 404 at proxy |
 | POST with multipart uploads | Unmodified request body and headers |
-| WordPress login cookies | No cookie rewrite |
-| WordPress redirects | Unmodified Location unless a specific bug is proven |
+| Session cookies | No cookie rewrite |
+| Application redirects | Unmodified Location unless a specific bug is proven |
 | WebSocket / long-running upload | No early termination |
 | localhost:80 already in use | Both servers coexist |
 | `0.0.0.0:80` already in use | Clear conflict diagnostic |
@@ -372,11 +372,11 @@ Before release, update `OWNER` to the repository owner in README, script and CI;
 
 - Enable TLS at `127.0.0.42:443`, leaving `127.0.0.1:443` untouched.
 - Create a local root CA with secure private-key storage and explicit trust/untrust commands on macOS and Linux.
-- Generate leaf certificates **per requested hostname using SNI** and cache securely. A `*.test` cert does not cover `site.install.web.test`.
-- Correctly set `X-Forwarded-Proto: https` to backend, without enabling it during HTTP requests. Document the WordPress reverse-proxy HTTPS detection change separately.
+- Generate leaf certificates **per requested hostname using SNI** and cache securely. A `*.test` cert does not cover `tenant.app.test`.
+- Correctly set `X-Forwarded-Proto: https` to backend, without enabling it during HTTP requests. Document application configuration for trusted reverse-proxy HTTPS detection separately.
 - Add tests for SANs, cert renewal, permission boundaries, trust-store changes, invalid hostnames and cleanup.
 - Make HTTPS opt-in first; avoid surprise browser redirects or automatic HSTS.
-- Keep the same YAML installation mapping and routing, adding TLS configuration without a breaking schema migration.
+- Keep the same YAML route mapping and routing, adding TLS configuration without a breaking schema migration.
 
 ## 11. Codex execution protocol
 
@@ -385,7 +385,7 @@ Implement in the milestone order above. For each milestone:
 1. Summarize files to change and intended behavior briefly.
 2. Write failing tests for routing/DNS/proxy behavior before implementation when possible.
 3. Implement the smallest correct change and run appropriate tests/linters.
-4. Inspect diff for accidental scope creep, privileged operations, hidden external dependencies and WordPress Host-header regressions.
+4. Inspect diff for accidental scope creep, privileged operations, hidden external dependencies and Host-header regressions.
 5. Create a focused Conventional Commit on a feature branch. Open a PR or provide a PR-ready diff and test summary.
 6. Record known limitations honestly; never mark OS tests as passing when they have not run.
 

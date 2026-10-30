@@ -1,0 +1,28 @@
+version: 2
+project_name: raymond
+snapshot:
+  version_template: '0.1.0-rc.g{{ .ShortCommit }}'
+builds:
+  - id: raymond
+    main: ./cmd/raymond
+    binary: raymond
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}}
+archives:
+  - formats: [tar.gz]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files: [LICENSE, README.md]
+checksum:
+  name_template: checksums.txt
+release:
+  github:
+    owner: cbspire
+    name: raymond
+  mode: keep-existing
+  prerelease: auto
+changelog:
+  use: git

@@ -1,0 +1,15 @@
+version: 1
+dns:
+  zones: [test, internal]
+  listen: 127.0.0.43:53
+proxy:
+  listen: 127.0.0.42:80
+  # macOS only; retains exact bind checks while permitting an HTTP wildcard neighbor.
+  # allow_wildcard_coexistence: true
+routes:
+  - domain: app.test
+    target: 127.0.0.1:9001
+  - domain: api.test
+    target: 127.0.0.1:9002
+  - domain: demo.internal
+    target: 127.0.0.2:8080
