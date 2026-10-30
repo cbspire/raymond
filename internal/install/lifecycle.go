@@ -133,6 +133,16 @@ func Install(path string) error {
 		return e
 	}
 	defer unlock()
+	return installLocked(path)
+}
+func installLocked(path string) error {
+	exe, e := os.Executable()
+	if e != nil {
+		return e
+	}
+	return installSourceLocked(path, exe)
+}
+func installSourceLocked(path, exe string) error {
 	c, e := config.Load(path)
 	if e != nil {
 		return e
@@ -152,10 +162,6 @@ func Install(path string) error {
 		return e
 	}
 	files[ConfigPath] = b
-	exe, e := os.Executable()
-	if e != nil {
-		return e
-	}
 	owner, e := installerUID()
 	if e != nil {
 		return e
@@ -329,6 +335,9 @@ func Control(action string) error {
 		return e
 	}
 	defer unlock()
+	return controlLocked(action)
+}
+func controlLocked(action string) error {
 	if action != "status" {
 		if e := root(); e != nil {
 			return e
@@ -387,6 +396,9 @@ func Uninstall() error {
 		return e
 	}
 	defer unlock()
+	return uninstallLocked()
+}
+func uninstallLocked() error {
 	s, e := ReadState(statePath)
 	if os.IsNotExist(e) {
 		return nil

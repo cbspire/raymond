@@ -564,6 +564,23 @@ func TestInstalledLifecycle(t *testing.T) {
 			t.Fatal(e)
 		}
 	}()
+
+	// Reconfigure a running service, then force a valid-but-unsupported listener
+	// configuration through setup and verify restoration of the previous service.
+	must(t, binary, "setup", "--config", configPath)
+	eventually(t, "setup update", func() error { return fetch(httpClient, "setup.install0.web.test", 0) })
+	changed := c
+	changed.Proxy.Listen = "127.0.0.42:8080"
+	invalidSetup := filepath.Join(dir, "unsupported-setup.yaml")
+	encoded, err := yaml.Marshal(changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, invalidSetup, encoded, 0644)
+	if out, err := command(binary, "setup", "--config", invalidSetup); err == nil || !strings.Contains(string(out), "previous service restored") {
+		t.Fatalf("setup rollback: %v %s", err, out)
+	}
+	eventually(t, "setup rollback", func() error { return fetch(httpClient, "rollback.install0.web.test", 0) })
 	must(t, binary, "stop")
 	if runtime.GOOS == "darwin" {
 		for _, ip := range []string{"127.0.0.42", "127.0.0.43"} {
@@ -623,4 +640,8 @@ func TestInstalledLifecycle(t *testing.T) {
 			}
 		}
 	}
+	must(t, binary, "setup", "--config", configPath)
+	eventually(t, "fresh setup", func() error { return fetch(httpClient, "fresh.install0.web.test", 0) })
+	must(t, binary, "uninstall")
+
 }

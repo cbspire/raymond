@@ -10,7 +10,7 @@ When a configured DNS zone contains `raymond.test`, its A record resolves to the
 
 Zones and domains are lowercase ASCII DNS names after normalization; one final dot is ignored. Unicode is rejected: convert IDNA names to explicit punycode before configuration. `.local` zones are disabled. Hosts match a route's base domain or any descendant, with longest suffix winning at label boundaries. All route domains must belong to a configured zone. Targets are IPv4 loopback literals with numeric ports. External targets and IPv6 are deliberately unsupported in v0.1.
 
-Edit the user file and validate with `raymond config validate`. Privileged installation validates and copies it to `/etc/raymond/config.yaml`, which remains root-owned and not writable by other users. The service reads that protected snapshot, so user edits require the documented uninstall/reinstall cycle before taking effect. There is no hot reload or domain CRUD API. Uninstall preserves your user configuration.
+Edit the user file and validate with `raymond config validate`. Privileged installation validates and copies it to `/etc/raymond/config.yaml`, which remains root-owned and not writable by other users. The service reads that protected snapshot, so run `raymond setup` to apply user edits. There is no hot reload or domain CRUD API. Uninstall preserves your user configuration.
 
 ## macOS HTTP socket coexistence
 
@@ -22,4 +22,4 @@ proxy:
   allow_wildcard_coexistence: true
 ```
 
-This changes the preflight policy only; it does not change routing, add listeners, alter Docker or terminate another process. After editing an already-installed configuration, follow the existing uninstall/reinstall procedure to update the protected service snapshot.
+This changes the preflight policy only; it does not change routing, add listeners, alter Docker or terminate another process. After editing an already-installed configuration, run `raymond setup` to update the protected service snapshot.

@@ -1,18 +1,21 @@
 # Installation and removal
 
-Raymond has two installation steps: obtaining a binary as an ordinary user, then explicitly installing OS DNS/service integration as an administrator. Downloading the binary alone never changes DNS. Use the [released binary walkthrough](../README.md#install-a-released-binary) for `0.1.0`, download candidate archives for testing, or follow the [source-build walkthrough](../README.md#build-from-source) for development.
+For automatic setup, run `curl -fsSL https://raw.githubusercontent.com/cbspire/raymond/main/install.sh | bash` as your normal user. The installer verifies the binary, creates user config, requests administrator access, configures DNS, starts the service and updates your shell profile. Use `raymond upgrade` later. The manual steps below remain available.
+
+Raymond has two installation steps: obtaining a binary as an ordinary user, then explicitly installing OS DNS/service integration as an administrator. Downloading the binary alone never changes DNS. Use the [released binary walkthrough](../README.md#install) for `0.1.1`, download candidate archives for testing, or follow the [source-build walkthrough](../README.md#build-from-source) for development.
 
 ## Install a candidate without Go
 
 1. Open PR #1 → Checks → **Privileged OS integration** → workflow run. Choose a run with passing macOS and Linux acceptance jobs.
 2. Download its `raymond-candidate-*` artifact and unzip it into a directory you control. Artifacts are retained for 14 days and private repositories require GitHub authentication to download them.
 3. The bundle contains `dist/` with four archives, `checksums.txt` and `metadata.json`, plus `scripts/install.sh`, this guide, README and an example YAML. Each native archive has one executable (`raymond`) plus README/LICENSE.
-4. Read `dist/metadata.json` to obtain the exact candidate version, such as `0.1.0-rc.gabcdef0`. Inspect the included installer before running it.
+4. Read `dist/metadata.json` to obtain the exact candidate version, such as `0.1.1-rc.gabcdef0`. Inspect the included installer before running it.
 5. From the unzipped bundle, install the matching native binary as your ordinary user:
 
 ```sh
 # Replace this value with the exact "version" from dist/metadata.json.
-RAYMOND_VERSION=0.1.0-rc.gabcdef0 \
+RAYMOND_VERSION=0.1.1-rc.gabcdef0 \
+  RAYMOND_BINARY_ONLY=1 \
   RAYMOND_ARCHIVE_DIR="$PWD/dist" \
   bash scripts/install.sh
 export PATH="$HOME/.local/bin:$PATH"
@@ -73,7 +76,7 @@ curl --noproxy '*' --resolve api.app.raymond.test:80:127.0.0.42 \
   http://api.app.raymond.test/
 ```
 
-A successful direct proxy request does not establish that OS split DNS works. Use `raymond status` to inspect service state and `raymond logs` to follow live requests. `logs --lines N` changes the recent history and `logs --no-follow` exits after printing it. macOS uses `/var/log/raymond.log`; Linux uses the journal for `raymond.service` only. Request logs require the managed service binary to include the current logging implementation; rebuilds require the documented uninstall/install/start cycle to update that copy.
+A successful direct proxy request does not establish that OS split DNS works. Use `raymond status` to inspect service state and `raymond logs` to follow live requests. `logs --lines N` changes the recent history and `logs --no-follow` exits after printing it. macOS uses `/var/log/raymond.log`; Linux uses the journal for `raymond.service` only. Request logs require the managed service binary to include the current logging implementation; run `raymond setup` after a local rebuild to update that copy.
 
 ## Foreground development without Linux OS setup
 
@@ -107,14 +110,9 @@ On macOS high ports still require the dedicated loopback aliases. Do not assume 
 
 ## Upgrades and config changes
 
-An identical install is idempotent. Changing installed config or replacing its managed binary directly invalidates the ownership hashes and causes uninstall to refuse cleanup.
+Use `raymond upgrade` (or `raymond update`) for the latest stable release, or `raymond upgrade --version 0.1.1` to pin one. Existing user configuration is preserved. The installer restores the previous user binary if setup fails. Native setup verifies owned resources before stopping the service, saves its protected binary/config and restores them if replacement fails. Recovery failures retain the backup directory named in the error for explicit repair.
 
-1. Keep the existing managed binary and installed resources intact.
-2. Run `sudo ./bin/raymond uninstall`. It stops the service if needed.
-3. Edit and validate `~/.raymond/raymond.yaml` (or your explicit source YAML), or rebuild/replace your reviewed local binary.
-4. Run install, doctor and start again using the source config.
-
-This requires downtime; there is no hot reload. On macOS use `start` after `stop`; `restart` kickstarts an already-loaded launchd service.
+After editing your YAML or rebuilding locally, run `raymond setup` to apply it. Setup requests administrator access and briefly restarts the service. There is no hot reload. Modified protected files still cause a refusal; resolve the ownership diagnostic before retrying. Manual uninstall/install/start remains supported.
 
 ## Uninstall and interrupted setup
 
@@ -132,10 +130,10 @@ After a release exists, `scripts/install.sh` supports:
 
 | Variable | Behavior |
 | --- | --- |
-| `RAYMOND_VERSION=0.1.0` | Select an immutable stable or prerelease tag; online mode otherwise resolves latest stable once. |
+| `RAYMOND_VERSION=0.1.1` | Select an immutable stable or prerelease tag; online mode otherwise resolves latest stable once. |
 | `RAYMOND_ARCHIVE_DIR=/absolute/path/to/dist` | Install already-downloaded archives and checksums without network access; requires a pinned version. |
 | `RAYMOND_INSTALL_DIR=/absolute/path` | Override `~/.local/bin`; only the binary is installed there. |
 
 The script requires Bash (including macOS Bash 3.2), tar, gzip, awk and standard file tools, plus `shasum` on macOS or `sha256sum` on Linux. Online downloads additionally require curl. It accepts no positional arguments. Downloads and redirects use HTTPS. Checksums, exact archive names and regular-file entries are checked before executing the staged binary's `version` command. Failed downloads/checksums/validation leave an existing binary unchanged. A directory or symlink at the destination is refused. Staging files are removed on failure and handled signals.
 
-The SHA-256 manifest comes from the same GitHub release as the archive; this provides integrity but not independent provenance. Review signing/attestation before broader distribution. The installer never invokes sudo or changes service/DNS settings.
+The SHA-256 manifest comes from the same GitHub release as the archive; this provides integrity but not independent provenance. Review signing/attestation before broader distribution. Default setup requests administrator access for service/DNS changes. Set `RAYMOND_BINARY_ONLY=1` to skip those steps and shell-profile edits.

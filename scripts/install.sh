@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Install only the user-owned binary. OS integration is a separate explicit step.
+# Download and verify as the user; native setup requests administrator access.
 set -euo pipefail
 repo=cbspire/raymond
+binary_only=${RAYMOND_BINARY_ONLY:-0}
 fail() { printf 'Raymond installer: %s\n' "$*" >&2; exit 1; }
+[[ "$binary_only" = 0 || "$binary_only" = 1 ]] || fail "RAYMOND_BINARY_ONLY must be 0 or 1."
+[ "$binary_only" = 1 ] || [ "$(id -u)" != 0 ] || fail "Run without sudo; setup requests administrator access when needed."
 [ "$#" -eq 0 ] || fail 'Use RAYMOND_VERSION and RAYMOND_INSTALL_DIR environment variables; no arguments are accepted.'
 for tool in uname tar gzip awk mktemp mkdir chmod mv rm cp; do
   command -v "$tool" >/dev/null 2>&1 || fail "Required command not found: $tool"
@@ -47,9 +50,11 @@ archive="raymond_${version#v}_${os}_${arch}.tar.gz"
 base="https://github.com/$repo/releases/download/$version"
 tmp=$(mktemp -d)
 stage=''
+backup=''
 cleanup() {
   rm -rf "$tmp"
   if [ -n "$stage" ]; then rm -f "$stage"; fi
+  if [ -n "$backup" ]; then rm -f "$backup"; fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -82,7 +87,31 @@ if ! binary_version=$("$stage" version); then
 fi
 # Check again after downloading so newly created directories/links are refused.
 [ ! -d "$dir/raymond" ] && [ ! -L "$dir/raymond" ] || fail 'Destination changed to a directory or symbolic link.'
+if [ -f "$dir/raymond" ]; then
+  backup=$(mktemp "$dir/.raymond-backup.XXXXXX")
+  cp -p "$dir/raymond" "$backup"
+fi
 mv -f "$stage" "$dir/raymond"
 stage=''
-printf '%s\nInstalled %s/raymond. Add %s to PATH if needed.\n' "$binary_version" "$dir" "$dir"
-printf '%s\n' 'No DNS or service changes were made. Follow the OS setup steps in https://github.com/cbspire/raymond#install-and-enable-os-integration.'
+printf '%s\nInstalled %s/raymond.\n' "$binary_version" "$dir"
+if [ "$binary_only" = 1 ]; then exit 0; fi
+if ! "$dir/raymond" setup; then
+  if [ -n "$backup" ]; then mv -f "$backup" "$dir/raymond"; backup=''; fi
+  fail 'Setup did not complete. Your configuration is preserved; see the diagnostic above before retrying.'
+fi
+case ":$PATH:" in
+  *":$dir:"*) ;;
+  *)
+    case "${SHELL:-}" in
+      */zsh) profile="$HOME/.zshrc";;
+      */bash) if [ "$os" = darwin ]; then profile="$HOME/.bash_profile"; else profile="$HOME/.bashrc"; fi;;
+      *) profile="$HOME/.profile";;
+    esac
+    printf -v path_line 'export PATH=%q:"$PATH"' "$dir"
+    if ! grep -Fqx "$path_line" "$profile" 2>/dev/null; then
+      printf '\n# Raymond\n%s\n' "$path_line" >> "$profile"
+    fi
+    printf 'Open a new terminal to use raymond, or run: %s\n' "$path_line"
+    ;;
+esac
+printf '%s\n' 'Ready: http://raymond.test' 'Upgrade later with: raymond upgrade'

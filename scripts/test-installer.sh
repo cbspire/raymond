@@ -33,7 +33,7 @@ fi
 SH
 chmod +x "$tmp/fake/"*
 export PATH="$tmp/fake:$PATH" FIXTURE="$tmp/release" CURL_LOG="$tmp/curl.log"
-export RAYMOND_VERSION=0.1.0 RAYMOND_INSTALL_DIR="$tmp/install space" TMPDIR="$tmp/downloads"
+export RAYMOND_BINARY_ONLY=1 RAYMOND_VERSION=0.1.0 RAYMOND_INSTALL_DIR="$tmp/install space" TMPDIR="$tmp/downloads"
 export FIXTURE_OS=Linux FIXTURE_ARCH=x86_64
 archive=raymond_0.1.0_linux_amd64.tar.gz
 package_fixture() {
@@ -134,4 +134,30 @@ unset RAYMOND_ARCHIVE_DIR FAIL_DOWNLOAD
 export RAYMOND_INSTALL_DIR=relative/path
 reject 'relative install directory'
 [ -z "$(ls -A "$tmp/downloads")" ]
+# Full setup runs once per invocation, updates PATH idempotently and restores
+# the previous user executable if privileged setup reports failure.
+if [ "$(id -u)" != 0 ]; then
+  unset RAYMOND_INSTALL_DIR
+  export HOME="$tmp/home" SHELL=/bin/zsh SETUP_LOG="$tmp/setup.log" SETUP_FAIL=0
+  mkdir -p "$HOME" "$tmp/files"
+  cat > "$tmp/files/raymond" <<'SH'
+#!/bin/sh
+case "$1" in
+  version) echo 'raymond 0.1.1';;
+  setup) echo setup >> "$SETUP_LOG"; exit "$SETUP_FAIL";;
+  *) exit 1;;
+esac
+SH
+  chmod +x "$tmp/files/raymond"
+  package_fixture
+  export RAYMOND_BINARY_ONLY=0
+  bash "$root/scripts/install.sh" > /dev/null
+  bash "$root/scripts/install.sh" > /dev/null
+  [ "$(wc -l < "$SETUP_LOG" | tr -d ' ')" = 2 ]
+  [ "$(grep -c '# Raymond' "$HOME/.zshrc")" = 1 ]
+  printf '#!/bin/sh\necho previous\n' > "$HOME/.local/bin/raymond"
+  export SETUP_FAIL=1
+  reject 'failed setup'
+  [ "$("$HOME/.local/bin/raymond" version)" = previous ]
+fi
 echo 'Installer platform selection, latest/pinned download, upgrade preservation, archive, path and failure fixtures passed'
