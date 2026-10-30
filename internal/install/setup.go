@@ -12,14 +12,19 @@ import (
 // Setup updates a verified installation under one lifecycle lock. A saved copy
 // of the old executable and protected config permits recovery after setup fails.
 func Setup(path string) error {
+	exe, e := os.Executable()
+	if e != nil {
+		return e
+	}
+	return SetupSource(path, exe)
+}
+
+// SetupSource applies a verified executable from a fixed upgrade staging area.
+func SetupSource(path, exe string) error {
 	if e := root(); e != nil {
 		return e
 	}
 	if _, e := config.Load(path); e != nil {
-		return e
-	}
-	exe, e := os.Executable()
-	if e != nil {
 		return e
 	}
 	owner, e := installerUID()
@@ -36,7 +41,7 @@ func Setup(path string) error {
 	defer unlock()
 	_, e = Installed()
 	if os.IsNotExist(e) {
-		if e = installLocked(path); e != nil {
+		if e = installSourceLocked(path, exe); e != nil {
 			return e
 		}
 		return controlLocked("start")
@@ -66,7 +71,7 @@ func Setup(path string) error {
 		_ = os.RemoveAll(backup)
 		return e
 	}
-	e = installLocked(path)
+	e = installSourceLocked(path, exe)
 	if e == nil {
 		e = controlLocked("start")
 	}

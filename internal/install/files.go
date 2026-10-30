@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/cbspire/raymond/internal/control"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -184,6 +185,9 @@ func Remove(statePath string, s State) error {
 }
 
 func resourceMode(path string) os.FileMode {
+	if path == control.RootDir+"/owner.json" || path == control.RootDir+"/proxy-token" {
+		return 0600
+	}
 	if path == darwin.BinaryPath || path == linux.BinaryPath {
 		return 0755
 	}

@@ -16,22 +16,22 @@ import (
 )
 
 type DNS struct {
-	Zones  []string `yaml:"zones"`
-	Listen string   `yaml:"listen"`
+	Zones  []string `yaml:"zones" json:"zones"`
+	Listen string   `yaml:"listen" json:"listen"`
 }
 type Proxy struct {
-	Listen                   string `yaml:"listen"`
-	AllowWildcardCoexistence bool   `yaml:"allow_wildcard_coexistence,omitempty"`
+	Listen                   string `yaml:"listen" json:"listen"`
+	AllowWildcardCoexistence bool   `yaml:"allow_wildcard_coexistence,omitempty" json:"allow_wildcard_coexistence,omitempty"`
 }
 type Route struct {
-	Domain string `yaml:"domain"`
-	Target string `yaml:"target"`
+	Domain string `yaml:"domain" json:"domain"`
+	Target string `yaml:"target" json:"target"`
 }
 type Config struct {
-	Version int     `yaml:"version"`
-	DNS     DNS     `yaml:"dns"`
-	Proxy   Proxy   `yaml:"proxy"`
-	Routes  []Route `yaml:"routes"`
+	Version int     `yaml:"version" json:"version"`
+	DNS     DNS     `yaml:"dns" json:"dns"`
+	Proxy   Proxy   `yaml:"proxy" json:"proxy"`
+	Routes  []Route `yaml:"routes" json:"routes"`
 }
 
 // Normalize uses ASCII DNS labels; Unicode must be supplied as explicit punycode.

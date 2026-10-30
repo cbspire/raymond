@@ -155,7 +155,7 @@ func installSourceLocked(path, exe string) error {
 	}
 	files := darwin.Files(c)
 	if runtime.GOOS == "linux" {
-		files = linux.Files(c)
+		files = linux.Files(c, ManagementAvailable())
 	}
 	b, e := yaml.Marshal(c)
 	if e != nil {
@@ -396,6 +396,12 @@ func Uninstall() error {
 		return e
 	}
 	defer unlock()
+	if _, e := Installed(); e != nil && !os.IsNotExist(e) {
+		return e
+	}
+	if e := uninstallManagementLocked(); e != nil {
+		return e
+	}
 	return uninstallLocked()
 }
 func uninstallLocked() error {

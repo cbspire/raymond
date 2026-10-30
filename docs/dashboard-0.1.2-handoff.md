@@ -1,0 +1,57 @@
+# 0.1.2 dashboard implementation handoff
+
+## Status
+
+Work in progress on `feat/dashboard-0.1.2`, based on published 0.1.1 (`38f1b9b`). This branch is NOT ready to merge or release. The user requested pushing this checkpoint and continuing in Codex Cloud because the local Mac must shut down. The saved cloud environment is named `raymond`; the desktop tool reported `status: ready` but `runnable: false`, preventing automatic launch.
+
+Repository: https://github.com/cbspire/raymond. It is public. Main requires PRs and six GitHub Actions checks: `checks (macos-15)`, `checks (ubuntu-24.04)`, `smoke (macos-15)`, `smoke (ubuntu-24.04)`, `vulnerabilities`, `codeql`. Administrator enforcement, linear history and resolved conversations are required; force pushes/deletion are disabled. Zero additional reviewers are required for the sole maintainer. Preserve existing stable major Action tags. Do not redesign pipelines or bypass protection.
+
+The user explicitly authorized implementing the complete plan below, merging through protected-main checks and publishing unprefixed tag `0.1.2` only after native macOS/Ubuntu acceptance passes. Do not install/reconfigure privileged resources on the user's workstation. Test native lifecycle only on disposable supported runners. HTTP only; HTTPS is deferred to 0.2. Keep documentation generic. Single binary, offline serving, no external runtime frontend dependencies.
+
+## Implemented checkpoint
+
+- `internal/control`: versioned protocol types, private Unix-socket client and proxy forwarding; separate owner/proxy credentials; browser session/CSRF/Host/Origin checks; single-use 60-second launch tokens and persistent 30-day sessions in root-owned JSON. Tests cover boundary failures, replay and session persistence. No runtime broker is wired yet.
+- `internal/config/edit.go`: revision hashes, invoking-user-owned file checks, symlink rejection, atomic private writes with stale-edit detection and YAML comment preservation. Tests cover comments, stale revisions and symlinks. JSON field tags match the unchanged YAML schema.
+- `internal/release`: native immutable stable-release resolution, checksum/size validation and bounded archive extraction. No downloaded shell execution. Tests reject invalid versions, duplicate checksums, traversal, duplicate/unknown members and symlinks. Not wired to upgrade yet.
+- `internal/install/management.go`: initial management enrollment/resource generation, protected metadata and proxy credential, a separate root launchd/systemd management service on a private Unix socket, ownership verification and cleanup helpers. This is scaffolding: no `_manager` command, daemon server or enrollment wiring exists yet.
+- Linux service templates can optionally inject the proxy credential through `LoadCredential`; the proxy retains DynamicUser and current hardening. Existing installs without management keep the old unit behavior.
+- `install.SetupSource(path, executable)` extends the existing locked setup/rollback transaction to accept a verified executable. Needed for a native upgrade worker. Existing public Setup resolves os.Executable and delegates.
+- Uninstall now includes management cleanup when enrolled. Needs comprehensive failure/interruption/native tests before use.
+
+Important: the visual dashboard, root backend operations, safe dropped-UID helpers, CLI/dashboard integration, durable upgrade runner, logs/events and native/browser acceptance extensions are NOT implemented. No release version bump, PR, 0.1.2 tag or publication has happened.
+
+Validation at checkpoint: package tests for config/control/release/install/Linux templates passed; full `go test ./...` run before checkpoint push. Full lint/race/integration/build matrix/Agent CI/native/browser checks remain to run after implementation. Some checkpoint tests were added alongside implementation; add behavioral tests before further DNS/proxy routing changes.
+
+## Approved product behavior
+
+Turn `raymond.test` into Raymond's main management interface, retaining warm paper, burgundy and restrained typography. Beautiful, responsive, accessible embedded UI; no CDN dependencies.
+
+- Services default view: register local apps by domain/backend IP/port; add/edit/remove through inline forms with field validation and clickable URLs. These are route mappings, NOT app/container process management.
+- DNS/settings: zones and all currently supported config, with listeners and Docker coexistence under Advanced. Keep loopback/default-port/platform restrictions, schema version 1 and existing `routes` model. DNS records remain derived; no arbitrary DNS records or HTTPS.
+- Activity: live request/service logs, pause/resume, search, host/status filters and clear empty/disconnected states. Never expose query strings, credentials, cookies or payloads. Render all logs/config as text.
+- Status/version, restart, diagnostics, explicit update checks and Update Raymond. Stop requires confirmation explaining dashboard shutdown; `raymond start` brings it back.
+- Browser drafts until Save & Apply. Show change summaries and warn about unsaved edits. Save validates complete config and detects external revisions. Active/saved revisions are distinct. Failed activation restores the previous working service and keeps saved edits visibly pending, with Retry/Discard.
+- User corrected the initial always-available idea: dashboard lives on the existing proxy listener and disappears when Raymond stops. Restart/update briefly disconnects, then reconnects. No separate public admin port.
+- Initial setup or 0.1.1 migration may require one administrator authorization. Afterwards dashboard/CLI management and software updates require NO recurring passwords. No dashboard accounts/password setup. `raymond dashboard` opens an authorized browser; setup opens it automatically where a browser exists. Token exchange must be private and never logged.
+
+## Required architecture and continuation notes
+
+1. Root management backend in the same executable, accessed over the private Unix socket. The Linux HTTP/DNS proxy stays restricted. The root backend remains available for CLI start/control when the proxy is stopped. Browser API traffic is forwarded by the proxy with its separate broker credential; owner-only launch endpoints cannot be accessed using that credential.
+2. Fixed operations only. No API-supplied shell commands, paths, executables or download URLs. Root-owned enrollment metadata records the single authorized owner and fixed config/CLI paths. Store authorization outside editable YAML. CLI/browser must share the same operations API.
+3. The management daemon and proxy use the SAME protected executable path. The manager has a separate ownership journal, credentials and persistent sessions/operations under `/var/lib/raymond/management`; these survive proxy setup's uninstall/reinstall rollback. Its launchd/systemd unit is independent of the proxy. Existing new templates deliberately allow operation children to survive manager restart (`AbandonProcessGroup`, `KillMode=process`), so durable worker/locking and orphan recovery are mandatory.
+4. Implement invoking-user credential/config/CLI I/O through dropped-UID helpers. Reuse `config.OwnedDocument` and `SaveOwned`; the root broker must not blindly write into user-controlled paths. Enrollment is not yet wired to write `~/.raymond/control.json` with owner permissions. Protect file descriptors, secret contents and journals. Review symlink/ancestor/locking races and metadata validation thoroughly.
+5. Wire enrollment before applying Linux proxy templates so `LoadCredential` exists. Start the manager only after the protected executable is installed. Existing enrollment must preserve owner/session/credentials; do not silently transfer management to a new account or change its managed source path. Explicit custom CLI configs need coherent ownership/error handling.
+6. Durable serialized operations: queued/running/succeeded/failed with IDs and saved results; preserve rollback/progress across replacement of the manager executable. Reject conflicting concurrent operations or queue deterministically, and coordinate with the existing install lifecycle lock. Validate/recover interrupted journals at startup.
+7. Native upgrade must replace the old shell-installer upgrade code, not add a root shell execution path. Fixed GitHub repo, stable immutable tag, matching native archive/checksums, strict bounds and native extraction. Update protected proxy/manager executable plus authorized owner's CLI, preserve config and browser sessions, restore previous working binaries/config on failure and confirm new version/health before success. Explicit update requests are the ONLY external network traffic.
+8. Keep dashboard route precedence compatible with existing configured app routes. `raymond dashboard` must diagnose a route that shadows `raymond.test`, not silently steal that app hostname. Add strict browser API protections without exposing endpoints through app routes. Existing `internal/proxy/dashboard.go/html` are still the old landing page and should become the real UI.
+9. Logs/events must be bounded, cancel subprocesses when clients disconnect, preserve log redaction and reconnect after service restarts. Use fixed log sources only. Expose diagnostics separately for config, service/resolver, listener conflicts and bounded loopback backend reachability.
+
+## Required verification and delivery
+
+- Security tests: missing/invalid/replayed credentials, CSRF, hostile Host/Origin, cookie ambiguity, non-owner account, config/log XSS, endpoint isolation from app routes and arbitrary operation/path/URL rejection.
+- Config/operation tests: stale edits, invalid config, comment preservation, active vs saved revisions, pending retry/discard, concurrent tabs/CLI, failed activation, rollback, interrupted upgrades and journal recovery.
+- Browser tests: service CRUD, DNS/Advanced editing, Save & Apply, errors/pending changes, logs/filter/pause/reconnect, restart/stop messaging and update progress; desktop/mobile keyboard/accessibility/visual verification.
+- Native disposable macOS 15/arm64 and Ubuntu 24.04/amd64 tests: 0.1.1 migration, single-owner enrollment and no repeated passwords, credential delivery with restricted Linux proxy, preserved config, new management lifecycle, service/binary replacement and cleanup. Do NOT treat cross-builds as OS validation.
+- `make check`, `make integration`, static Darwin/Linux amd64/arm64 matrix, vulnerability scan, actionlint and tagged acceptance compilation. Use agent-ci skill for local CI before pushing completed changes. Prior local CI runner changes go.mod/go.sum modes to 755; fix only disposable runner tracked-file modes from git ls-files metadata then retry, never weaken real checks. Use explicit ci.yml rather than --all to avoid accidentally selecting the publication workflow locally.
+- Update AGENTS/plan/security docs to allow this explicitly authorized local management API (the historical plan still excludes a dashboard/control API). Update README/changelog/version metadata for 0.1.2.
+- Open/update PR from this branch, fix all required checks, merge normally, then tag/push `0.1.2`. Existing Release workflow gates publication on CI/security/native checks. User dislikes duplicate entire-pipeline runs; do not redesign workflows or launch unnecessary repeated checks. Verify uploaded checksums and published binary version after success.

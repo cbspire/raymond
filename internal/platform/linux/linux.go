@@ -11,10 +11,14 @@ const BinaryPath = "/usr/libexec/raymond/raymond"
 
 const Marker = "# Raymond owned; do not edit\n"
 
-func Files(c config.Config) map[string][]byte {
+func Files(c config.Config, management ...bool) map[string][]byte {
 	domains := make([]string, len(c.DNS.Zones))
 	for i, z := range c.DNS.Zones {
 		domains[i] = "~" + z
+	}
+	credential := ""
+	if len(management) > 0 && management[0] {
+		credential = "LoadCredential=raymond-control:/var/lib/raymond/management/proxy-token\n"
 	}
 	return map[string][]byte{
 		"/etc/systemd/network/80-raymond.link":    []byte(Marker + "[Match]\nOriginalName=raymond0\n\n[Link]\nAlias=Raymond private DNS routing\n"),
@@ -31,7 +35,7 @@ ExecStart=/usr/libexec/raymond/raymond serve --config /etc/raymond/config.yaml
 Restart=on-failure
 RestartSec=2
 DynamicUser=yes
-AmbientCapabilities=CAP_NET_BIND_SERVICE
+` + credential + `AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
 ProtectSystem=strict
