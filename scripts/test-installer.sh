@@ -134,6 +134,14 @@ unset RAYMOND_ARCHIVE_DIR FAIL_DOWNLOAD
 export RAYMOND_INSTALL_DIR=relative/path
 reject 'relative install directory'
 [ -z "$(ls -A "$tmp/downloads")" ]
+export RAYMOND_INSTALL_DIR="$tmp/install space"
+# The public entrypoint resolves latest once, then fetches the immutable installer.
+cp "$root/scripts/install.sh" "$FIXTURE/install.sh"
+unset RAYMOND_VERSION
+: > "$CURL_LOG"
+bash "$root/install.sh" > /dev/null
+[ "$(wc -l < "$CURL_LOG" | tr -d ' ')" = 4 ]
+grep -F 'https://raw.githubusercontent.com/cbspire/raymond/0.1.0/scripts/install.sh' "$CURL_LOG" > /dev/null
 # Full setup runs once per invocation, updates PATH idempotently and restores
 # the previous user executable if privileged setup reports failure.
 if [ "$(id -u)" != 0 ]; then
