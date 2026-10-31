@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/cbspire/raymond/internal/control"
 	"github.com/cbspire/raymond/internal/release"
@@ -28,5 +29,17 @@ func upgradeCommand(args []string) error {
 	if e != nil {
 		return fmt.Errorf("run raymond setup once to enroll native verified upgrades: %w", e)
 	}
-	return managedCommand(client, control.Request{Action: "update", Version: target})
+	return upgradeManaged(client, target, openBrowser)
+}
+
+func upgradeManaged(client *control.Client, target string, opener func(context.Context, string) error) error {
+	if e := managedCommand(client, control.Request{Action: "update", Version: target}); e != nil {
+		return e
+	}
+	if e := openDashboard(client, opener); e != nil {
+		// The durable update already succeeded. Browser or route errors must not
+		// suggest that its binaries/config need to be rolled back or retried.
+		fmt.Printf("Raymond upgrade completed, but the dashboard could not be opened: %v\n", e)
+	}
+	return nil
 }

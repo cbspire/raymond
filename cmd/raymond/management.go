@@ -75,6 +75,13 @@ func dashboardCommand(args []string) error {
 	if e != nil {
 		return fmt.Errorf("dashboard access unavailable; run raymond setup: %w", e)
 	}
+	return openDashboard(client, openBrowser)
+}
+
+// Both setup and upgrades use the same authorized launch path as the optional
+// dashboard shortcut. The opener receives only a private file URL, never a token.
+func openDashboard(client *control.Client, opener func(context.Context, string) error) error {
+	var e error
 	defer client.HTTP.CloseIdleConnections()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -116,18 +123,22 @@ func dashboardCommand(args []string) error {
 		return e
 	}
 	fileURL := (&url.URL{Scheme: "file", Path: filepath.Join(home, ".raymond", "dashboard-launch.html")}).String()
+	return opener(ctx, fileURL)
+}
+
+func openBrowser(ctx context.Context, fileURL string) error {
 	command := "/usr/bin/xdg-open"
 	if runtime.GOOS == "darwin" {
 		command = "/usr/bin/open"
 	}
-	if _, e = os.Stat(command); e != nil || (runtime.GOOS == "linux" && os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "") {
+	if _, e := os.Stat(command); e != nil || (runtime.GOOS == "linux" && os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "") {
 		fmt.Println("Dashboard access is enrolled. Open raymond dashboard in a desktop session to launch an authorized browser.")
 		return nil
 	}
 	cmd := exec.CommandContext(ctx, command, fileURL)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
-	if e = cmd.Run(); e != nil {
+	if e := cmd.Run(); e != nil {
 		return fmt.Errorf("browser could not be opened; run raymond dashboard in a desktop session")
 	}
 	return nil

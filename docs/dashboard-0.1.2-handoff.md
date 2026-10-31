@@ -101,3 +101,8 @@ Unit/integration tests cover ownership/CAS, private helper output, inherited loc
 ## CodeQL follow-up
 
 Browser sessions now use an explicit `X-Raymond-Session` capability kept in tab-scoped `sessionStorage`, plus CSRF/Host/Origin checks, instead of cookies on the HTTP-only dashboard. API/log requests omit cookies and reject redirects; app routes strip reserved management headers. Reloads and native replacement preserve authorized-tab access; authorize a new tab with `raymond dashboard`. Owner helpers also validate the complete 32-bit UID/GID range and reject native all-ones identity sentinels before conversion. The runner audit is recorded in `docs/validation.md`; runner labels and workflow triggers remain unchanged.
+
+
+## Automatic upgrade authorization
+
+A successful `raymond upgrade` now uses the shared private launch-file flow to open a newly authorized dashboard after the durable update completes. No separate dashboard command is required in the normal desktop upgrade flow. The manual `raymond dashboard` command remains an optional reopening shortcut. Failed upgrades do not mint/open dashboard launches; browser-launch or shadowed-route errors do not turn a completed update into a failed update. Headless operation retains the existing nonblocking browser fallback. CLI tests exercise terminal update results, a usable browser session exchange, private launch-file permissions, browser failure and app-route precedence through the Unix broker protocol.
