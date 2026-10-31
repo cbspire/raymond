@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/cbspire/raymond/internal/config"
 	"github.com/cbspire/raymond/internal/control"
@@ -137,7 +138,7 @@ func (b *Backend) Submit(ctx context.Context, r control.Request) (control.Operat
 	if b.RequireEnrollment && !install.ManagementReady() {
 		return control.Operation{}, &control.Error{Status: 503, Message: "enrollment incomplete; run raymond setup"}
 	}
-	j, e := control.OpenOperations(b.Directory)
+	j, e := openSubmissionJournal(ctx, b.Directory)
 	if e != nil {
 		return control.Operation{}, e
 	}
@@ -197,4 +198,39 @@ func asConflict(e error, out **control.Error) bool {
 		return true
 	}
 	return false
+}
+
+// A terminal result becomes durable before its worker removes rollback artifacts
+// and releases the lock. Wait briefly for that cleanup (or an idle recovery tick),
+// while keeping genuinely queued/running work an immediate conflict.
+func openSubmissionJournal(ctx context.Context, directory string) (*control.Operations, error) {
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	for {
+		if e := ctx.Err(); e != nil {
+			return nil, e
+		}
+		journal, e := control.OpenOperations(directory)
+		if e == nil {
+			return journal, nil
+		}
+		var conflict *control.Error
+		if !asConflict(e, &conflict) {
+			return nil, e
+		}
+		snapshot, err := control.SnapshotOperations(directory)
+		if err != nil {
+			return nil, err
+		}
+		if snapshot.Active() != nil {
+			return nil, e
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-deadline.C:
+			return nil, e
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
 }

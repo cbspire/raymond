@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -181,5 +182,78 @@ func TestUnixBrokerEndToEndCredentials(t *testing.T) {
 	defer result.Body.Close()
 	if result.StatusCode != 202 {
 		t.Fatal("authorized browser operation rejected", result.StatusCode)
+	}
+}
+
+func TestSubmitWaitsForTerminalWorkerCleanup(t *testing.T) {
+	b := backendFixture(t)
+	journal, e := control.OpenOperations(b.Directory)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer journal.Close()
+	op, e := journal.Enqueue(control.Request{Action: "start"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = journal.Start(op.ID); e != nil {
+		t.Fatal(e)
+	}
+	if e = journal.Finish(op.ID, nil, nil); e != nil {
+		t.Fatal(e)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { _, e := b.Submit(ctx, control.Request{Action: "restart"}); result <- e }()
+	select {
+	case e := <-result:
+		t.Fatalf("submission returned before terminal worker cleanup released its lock: %v", e)
+	case <-time.After(50 * time.Millisecond):
+	}
+	if e = journal.Close(); e != nil {
+		t.Fatal(e)
+	}
+	select {
+	case e := <-result:
+		if e != nil {
+			t.Fatal("follow-up command failed", e)
+		}
+	case <-ctx.Done():
+		t.Fatal("follow-up command did not resume")
+	}
+}
+
+func TestSubmitDoesNotWaitForActiveWork(t *testing.T) {
+	b := backendFixture(t)
+	journal, e := control.OpenOperations(b.Directory)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer journal.Close()
+	if _, e = journal.Enqueue(control.Request{Action: "start"}); e != nil {
+		t.Fatal(e)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, e = b.Submit(ctx, control.Request{Action: "restart"})
+	var conflict *control.Error
+	if !errors.As(e, &conflict) || conflict.Status != http.StatusConflict {
+		t.Fatal("active work must remain a conflict", e)
+	}
+}
+
+func TestSubmitCleanupWaitHonorsCancellation(t *testing.T) {
+	b := backendFixture(t)
+	journal, e := control.OpenOperations(b.Directory)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer journal.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, e = b.Submit(ctx, control.Request{Action: "restart"})
+	if !errors.Is(e, context.DeadlineExceeded) {
+		t.Fatal("cleanup wait ignored request cancellation", e)
 	}
 }

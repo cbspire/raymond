@@ -106,3 +106,6 @@ Browser sessions now use an explicit `X-Raymond-Session` capability kept in tab-
 ## Automatic upgrade authorization
 
 A successful `raymond upgrade` now uses the shared private launch-file flow to open a newly authorized dashboard after the durable update completes. No separate dashboard command is required in the normal desktop upgrade flow. The manual `raymond dashboard` command remains an optional reopening shortcut. Failed upgrades do not mint/open dashboard launches; browser-launch or shadowed-route errors do not turn a completed update into a failed update. Headless operation retains the existing nonblocking browser fallback. CLI tests exercise terminal update results, a usable browser session exchange, private launch-file permissions, browser failure and app-route precedence through the Unix broker protocol.
+
+
+A native follow-up run exposed the terminal-result/worker-lock handoff race in consecutive CLI operations. New submissions now wait up to two seconds only when the durable journal has no queued/running operation and its previous holder is finishing cleanup. Active operations still conflict immediately, and request cancellation stops the wait. Regression tests retain a terminal worker lock deliberately, verify a follow-up resumes after release, and verify active-work conflicts/cancellation.
