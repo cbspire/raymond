@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"github.com/cbspire/raymond/internal/config"
+	"github.com/cbspire/raymond/internal/control"
 	"github.com/cbspire/raymond/internal/diagnostics"
 	"github.com/cbspire/raymond/internal/install"
+	"github.com/cbspire/raymond/internal/manager"
 	"github.com/cbspire/raymond/internal/server"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
+	"time"
 )
 
 var version = "dev"
@@ -39,6 +43,19 @@ func installCommand(args []string) error {
 	if e != nil {
 		return e
 	}
+	if os.Geteuid() != 0 {
+		if client, err := control.OwnerClient(); err == nil {
+			if client.Enrolled {
+				if len(args) == 0 {
+					p = ""
+				}
+				return setupManaged(client, p)
+			}
+			client.HTTP.CloseIdleConnections()
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
 	if len(args) == 0 {
 		var created bool
 		p, created, e = initializeUserConfig()
@@ -64,9 +81,30 @@ func installCommand(args []string) error {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: raymond version|config|doctor|install|setup|upgrade|start|stop|restart|status|logs|uninstall|serve")
+		return fmt.Errorf("usage: raymond version|config|doctor|install|setup|dashboard|upgrade|start|stop|restart|status|logs|uninstall|serve")
 	}
 	switch args[0] {
+	case "_owner-io":
+		if len(args) != 1 {
+			break
+		}
+		return manager.OwnerHelper(os.Stdin, os.Stdout)
+	case "_operation":
+		if len(args) != 1 || os.Geteuid() != 0 {
+			break
+		}
+		f := os.NewFile(3, "operations.lock")
+		defer f.Close()
+		return manager.Worker(version, f)
+	case "_manager":
+		if len(args) != 1 {
+			break
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return manager.Run(ctx, version)
+	case "dashboard":
+		return dashboardCommand(args[1:])
 	case "_init-user-config":
 		if len(args) != 1 || os.Geteuid() == 0 {
 			return fmt.Errorf("user config helper requires an ordinary user and no arguments")
@@ -122,6 +160,30 @@ func run(args []string) error {
 		if e != nil {
 			return e
 		}
+		if os.Geteuid() != 0 {
+			if client, err := control.OwnerClient(); err == nil {
+				if len(args) > 1 {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					var state control.State
+					err = client.Call(ctx, "GET", control.Prefix+"state", nil, &state)
+					cancel()
+					if err != nil {
+						return err
+					}
+					absolute, e := filepath.Abs(p)
+					if e != nil {
+						return e
+					}
+					if absolute != state.ConfigPath {
+						return fmt.Errorf("doctor config must match the enrolled configuration")
+					}
+				}
+				return managedCommand(client, control.Request{Action: "diagnostics"})
+			} else if !os.IsNotExist(err) {
+				return err
+			}
+		}
+
 		c, e := config.Load(p)
 		if e != nil {
 			return e
@@ -146,6 +208,24 @@ func run(args []string) error {
 		if len(args) != 1 {
 			break
 		}
+		if os.Geteuid() != 0 {
+			if client, err := control.OwnerClient(); err == nil {
+				if args[0] == "status" {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					defer cancel()
+					defer client.HTTP.CloseIdleConnections()
+					var state control.State
+					if e := client.Call(ctx, "GET", control.Prefix+"state", nil, &state); e != nil {
+						return e
+					}
+					fmt.Printf("Raymond %s: running=%t pending=%t\n", state.Version, state.Running, state.Pending)
+					return nil
+				}
+				return managedCommand(client, control.Request{Action: args[0]})
+			} else if !os.IsNotExist(err) {
+				return err
+			}
+		}
 		if e := install.Control(args[0]); e != nil {
 			return e
 		}
@@ -162,7 +242,7 @@ func run(args []string) error {
 		if len(args) != 1 {
 			break
 		}
-		return install.Uninstall()
+		return uninstallCommand()
 	}
 	return fmt.Errorf("invalid command or arguments")
 }

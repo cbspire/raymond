@@ -4,6 +4,24 @@ For automatic setup, run `curl -fsSL https://raw.githubusercontent.com/cbspire/r
 
 Raymond has two installation steps: obtaining a binary as an ordinary user, then explicitly installing OS DNS/service integration as an administrator. Downloading the binary alone never changes DNS. Use the [released binary walkthrough](../README.md#install) for `0.1.1`, download candidate archives for testing, or follow the [source-build walkthrough](../README.md#build-from-source) for development.
 
+## 0.1.2 local management (feature branch)
+
+Run `raymond setup` as the intended ordinary owner. One administrator authorization installs the protected executable, independent proxy/manager services, root-only ownership metadata, and the owner's private `~/.raymond/control.json`. A 0.1.1 installation is migrated through the same enrollment flow. Native macOS/Ubuntu acceptance for this implementation is tracked separately from the historical 0.1.1 results; do not treat this branch as release-ready until those checks pass.
+
+After enrollment, config activation, service controls, diagnostics, log access and verified stable updates use the private broker without further sudo. Repeated `setup` with no arguments uses the enrolled config, including a custom path. Config, credential and CLI file access runs under the owner's UID; the broker never accepts commands, filesystem paths or download URLs from API callers. The CLI must remain at its recorded user-owned, owner-writable path. A different account or custom config path cannot silently take over an enrollment.
+
+Setup and a successful `raymond upgrade` automatically open an authorized dashboard without accounts/password setup. `raymond dashboard` remains an optional shortcut for reopening it later. The single-use launch token is kept in a private local redirect file, not a command-line argument or HTTP query. Browser sessions persist through reloads and service/manager updates in the authorized tab. Upgrades refresh browser authorization automatically; use the optional `raymond dashboard` shortcut for another tab. Authentication uses an explicit session header, not cookies. Stopping the proxy closes the dashboard; `raymond start` uses the surviving Unix-socket manager. An app route shadowing `raymond.test` is diagnosed by the CLI and retains precedence.
+
+Management state, sessions, serialized operations and rollback snapshots live under `/var/lib/raymond/management` (root-only). The socket is `/run/raymond-control/control.sock` on Linux and `/Library/PrivilegedHelperTools/raymond-control/control.sock` on macOS. Unix owner requests additionally verify the peer UID; Linux delivers the distinct browser-proxy credential through systemd `LoadCredential` to the restricted proxy. There is no public administration port.
+
+Workers retain their operation lock across manager replacement, keep a protected executable available, and persist rollback evidence before modifying resources. Interrupted running work is reconciled rather than replayed. A failed activation restores the working service and leaves the owner's saved edits pending for Retry/Discard. Changed/unproven files block recovery rather than being overwritten. Do not delete operation/rollback records to bypass a conflict.
+
+Explicit `raymond upgrade [--version 0.1.2]` resolves a stable immutable archive/checksum at the fixed repository, verifies/extracts it natively, checks the executable version, replaces protected and owner binaries, restarts management and confirms health/version, then opens a newly authorized dashboard in a desktop session. Browser-launch failures produce a warning without failing or retrying the completed upgrade. Headless upgrades still complete normally. Serving otherwise remains offline. CLI updates never download or execute a shell installer. An uncompleted first enrollment may need `setup` again; an already completed enrollment does not request recurring passwords.
+
+`sudo raymond uninstall` remains an explicit administrator removal action. It stops both native services and removes only proven owned resources, plus the owner's matching private management credential through a dropped-UID helper. The user's config and CLI are preserved. Root-only legacy install/start remains available without enrolling an ordinary owner.
+
+The following low-level installation guide also documents the published 0.1.1 workflow and compatibility commands.
+
 ## Install a candidate without Go
 
 1. Open PR #1 → Checks → **Privileged OS integration** → workflow run. Choose a run with passing macOS and Linux acceptance jobs.
@@ -110,9 +128,9 @@ On macOS high ports still require the dedicated loopback aliases. Do not assume 
 
 ## Upgrades and config changes
 
-Use `raymond upgrade` (or `raymond update`) for the latest stable release, or `raymond upgrade --version 0.1.1` to pin one. Existing user configuration is preserved. The installer restores the previous user binary if setup fails. Native setup verifies owned resources before stopping the service, saves its protected binary/config and restores them if replacement fails. Recovery failures retain the backup directory named in the error for explicit repair.
+For enrolled 0.1.2 management, use `raymond upgrade` (or `raymond update`) for the latest newer compatible stable release, or `raymond upgrade --version 0.1.2` to select one. Existing user configuration is preserved. The installer restores the previous user binary if setup fails. Native setup verifies owned resources before stopping the service, saves its protected binary/config and restores them if replacement fails. Recovery failures retain the backup directory named in the error for explicit repair.
 
-After editing your YAML or rebuilding locally, run `raymond setup` to apply it. Setup requests administrator access and briefly restarts the service. There is no hot reload. Modified protected files still cause a refusal; resolve the ownership diagnostic before retrying. Manual uninstall/install/start remains supported.
+After editing your YAML or rebuilding locally, run `raymond setup` to apply it. An enrolled setup briefly restarts the service without administrator prompts; initial enrollment requests authorization once. There is no hot reload. Modified protected files still cause a refusal; resolve the ownership diagnostic before retrying. Manual uninstall/install/start remains supported.
 
 ## Uninstall and interrupted setup
 

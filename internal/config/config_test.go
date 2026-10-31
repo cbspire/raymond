@@ -147,3 +147,20 @@ func TestLegacyRouteMergeAndCanonicalOutput(t *testing.T) {
 		t.Fatalf("canonical configuration does not round-trip: %v", e)
 	}
 }
+
+func TestWildcardRouteValidation(t *testing.T) {
+	for _, domain := range []string{"*.test", "*.apps.test", "*.APPS.TEST."} {
+		c, e := Decode(strings.NewReader("version: 1\ndns:\n  zones: [test]\nroutes:\n  - domain: '" + domain + "'\n    target: 127.0.0.1:9001\n"))
+		if e != nil {
+			t.Fatal(domain, e)
+		}
+		if !strings.HasPrefix(c.Routes[0].Domain, "*.") {
+			t.Fatal(c)
+		}
+	}
+	for _, domain := range []string{"*", "a.*.test", "**.test", "*.outside.example", "*..test"} {
+		if _, e := Decode(strings.NewReader("version: 1\ndns:\n  zones: [test]\nroutes:\n  - domain: '" + domain + "'\n    target: 127.0.0.1:9001\n")); e == nil {
+			t.Fatal("accepted", domain)
+		}
+	}
+}

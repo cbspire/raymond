@@ -6,10 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/cbspire/raymond/internal/control"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"syscall"
 
 	darwin "github.com/cbspire/raymond/internal/platform/darwin"
 	linux "github.com/cbspire/raymond/internal/platform/linux"
@@ -56,7 +59,7 @@ func ReadState(path string) (State, error) {
 	if e := SafePath(path); e != nil {
 		return s, e
 	}
-	b, e := os.ReadFile(path)
+	b, e := readResource(path, 4<<20)
 	if e != nil {
 		return s, e
 	}
@@ -64,7 +67,7 @@ func ReadState(path string) (State, error) {
 	return s, e
 }
 func verify(r Record) error {
-	b, e := os.ReadFile(r.Path)
+	b, e := readResource(r.Path, 256<<20)
 	if os.IsNotExist(e) {
 		return nil
 	}
@@ -83,6 +86,10 @@ func verify(r Record) error {
 // Apply never overwrites an existing resource. Its journal precedes file creation,
 // so interrupted installations can be explicitly uninstalled without guessing.
 func Apply(statePath string, files map[string][]byte, aliases []string) error {
+	return applyResources(statePath, files, aliases, false)
+}
+
+func applyResources(statePath string, files map[string][]byte, aliases []string, replaceBinary bool) error {
 	if _, e := os.Lstat(statePath); e == nil {
 		return fmt.Errorf("installation journal exists; verify status or uninstall before reinstalling")
 	} else if !os.IsNotExist(e) {
@@ -98,7 +105,7 @@ func Apply(statePath string, files map[string][]byte, aliases []string) error {
 		if e := SafePath(p); e != nil {
 			return e
 		}
-		if _, e := os.Lstat(p); !os.IsNotExist(e) {
+		if _, e := os.Lstat(p); !os.IsNotExist(e) && (!replaceBinary || p != binaryPath() || e != nil) {
 			return fmt.Errorf("refusing existing resource %s", p)
 		}
 		s.Files = append(s.Files, Record{p, digest(files[p])})
@@ -121,7 +128,12 @@ func Apply(statePath string, files map[string][]byte, aliases []string) error {
 			return e
 		}
 		mode := resourceMode(p)
-		if e = exclusive(p, files[p], mode); e != nil {
+		if replaceBinary && p == binaryPath() {
+			e = control.AtomicWrite(p, files[p], mode)
+		} else {
+			e = exclusive(p, files[p], mode)
+		}
+		if e != nil {
 			return fmt.Errorf("partial installation; uninstall to roll back: %w", e)
 		}
 	}
@@ -184,8 +196,39 @@ func Remove(statePath string, s State) error {
 }
 
 func resourceMode(path string) os.FileMode {
+	if path == control.RootDir+"/owner.json" || path == control.RootDir+"/proxy-token" {
+		return 0600
+	}
 	if path == darwin.BinaryPath || path == linux.BinaryPath {
 		return 0755
 	}
 	return 0644
+}
+
+// readResource rejects special files before reading and never follows a final
+// symlink. This also keeps corrupted journals/FIFOs from hanging management.
+func readResource(path string, limit int64) ([]byte, error) {
+	if e := SafePath(path); e != nil {
+		return nil, e
+	}
+	f, e := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if e != nil {
+		return nil, e
+	}
+	defer f.Close()
+	st, e := f.Stat()
+	if e != nil {
+		return nil, e
+	}
+	if !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("expected regular resource %s", path)
+	}
+	b, e := io.ReadAll(io.LimitReader(f, limit+1))
+	if e != nil {
+		return nil, e
+	}
+	if int64(len(b)) > limit {
+		return nil, fmt.Errorf("resource too large")
+	}
+	return b, nil
 }

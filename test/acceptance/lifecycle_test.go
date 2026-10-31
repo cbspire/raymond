@@ -31,7 +31,10 @@ import (
 func command(name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, name, args...)
+	// Root-only legacy lifecycle fixtures intentionally do not enroll a user.
+	cmd.Env = append(os.Environ(), "SUDO_UID=", "SUDO_GID=")
+	return cmd.CombinedOutput()
 }
 func must(t *testing.T, name string, args ...string) []byte {
 	t.Helper()
@@ -455,7 +458,7 @@ func TestInstalledLifecycle(t *testing.T) {
 		if e != nil {
 			return e
 		}
-		if response.StatusCode != http.StatusOK || !strings.Contains(string(body), "At your service.") {
+		if response.StatusCode != http.StatusOK || !strings.Contains(string(body), `id="root"`) {
 			return fmt.Errorf("dashboard response: HTTP %d", response.StatusCode)
 		}
 		return nil

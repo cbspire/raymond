@@ -52,3 +52,28 @@ func FuzzLabelBoundaries(f *testing.F) {
 		}
 	})
 }
+
+func TestExplicitWildcards(t *testing.T) {
+	r := New([]config.Route{{Domain: "*.test", Target: "all"}, {Domain: "*.apps.test", Target: "apps"}, {Domain: "api.apps.test", Target: "specific"}})
+	for host, want := range map[string]string{"test": "", "x.test": "all", "apps.test": "all", "x.apps.test": "apps", "deep.x.apps.test": "apps", "api.apps.test": "specific", "deep.api.apps.test": "specific", "evilapps.test": "all", "test.example": ""} {
+		got, _ := r.Match(host)
+		if got != want {
+			t.Errorf("%s: got %q want %q", host, got, want)
+		}
+	}
+}
+
+func TestWildcardAndApexPrecedence(t *testing.T) {
+	for _, routes := range [][]config.Route{
+		{{Domain: "apps.test", Target: "apex"}, {Domain: "*.apps.test", Target: "children"}},
+		{{Domain: "*.apps.test", Target: "children"}, {Domain: "apps.test", Target: "apex"}},
+	} {
+		r := New(routes)
+		for host, want := range map[string]string{"apps.test": "apex", "one.apps.test": "children", "deep.one.apps.test": "children"} {
+			got, _ := r.Match(host)
+			if got != want {
+				t.Fatalf("%s: got %s want %s", host, got, want)
+			}
+		}
+	}
+}

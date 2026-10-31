@@ -16,22 +16,22 @@ import (
 )
 
 type DNS struct {
-	Zones  []string `yaml:"zones"`
-	Listen string   `yaml:"listen"`
+	Zones  []string `yaml:"zones" json:"zones"`
+	Listen string   `yaml:"listen" json:"listen"`
 }
 type Proxy struct {
-	Listen                   string `yaml:"listen"`
-	AllowWildcardCoexistence bool   `yaml:"allow_wildcard_coexistence,omitempty"`
+	Listen                   string `yaml:"listen" json:"listen"`
+	AllowWildcardCoexistence bool   `yaml:"allow_wildcard_coexistence,omitempty" json:"allow_wildcard_coexistence,omitempty"`
 }
 type Route struct {
-	Domain string `yaml:"domain"`
-	Target string `yaml:"target"`
+	Domain string `yaml:"domain" json:"domain"`
+	Target string `yaml:"target" json:"target"`
 }
 type Config struct {
-	Version int     `yaml:"version"`
-	DNS     DNS     `yaml:"dns"`
-	Proxy   Proxy   `yaml:"proxy"`
-	Routes  []Route `yaml:"routes"`
+	Version int     `yaml:"version" json:"version"`
+	DNS     DNS     `yaml:"dns" json:"dns"`
+	Proxy   Proxy   `yaml:"proxy" json:"proxy"`
+	Routes  []Route `yaml:"routes" json:"routes"`
 }
 
 // Normalize uses ASCII DNS labels; Unicode must be supplied as explicit punycode.
@@ -166,9 +166,16 @@ func (c *Config) Validate() error {
 	}
 	seen = map[string]bool{}
 	for i, r := range c.Routes {
-		r.Domain, e = Normalize(r.Domain)
+		if len(strings.TrimSuffix(r.Domain, ".")) > 253 {
+			return fmt.Errorf("route domain: invalid hostname length")
+		}
+		wildcard := strings.HasPrefix(r.Domain, "*.")
+		r.Domain, e = Normalize(strings.TrimPrefix(r.Domain, "*."))
 		if e != nil {
 			return fmt.Errorf("route domain: %w", e)
+		}
+		if wildcard {
+			r.Domain = "*." + r.Domain
 		}
 		if seen[r.Domain] {
 			return fmt.Errorf("duplicate route %s", r.Domain)
@@ -176,7 +183,7 @@ func (c *Config) Validate() error {
 		seen[r.Domain] = true
 		found := false
 		for _, z := range c.DNS.Zones {
-			found = found || Within(r.Domain, z)
+			found = found || Within(strings.TrimPrefix(r.Domain, "*."), z)
 		}
 		if !found {
 			return fmt.Errorf("route %s outside configured zones", r.Domain)

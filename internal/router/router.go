@@ -4,6 +4,7 @@ package router
 import (
 	"github.com/cbspire/raymond/internal/config"
 	"sort"
+	"strings"
 )
 
 type Router struct{ routes []config.Route }
@@ -13,7 +14,13 @@ const DashboardHost = "raymond.test"
 
 func New(routes []config.Route) *Router {
 	r := &Router{routes: append([]config.Route(nil), routes...)}
-	sort.Slice(r.routes, func(i, j int) bool { return len(r.routes[i].Domain) > len(r.routes[j].Domain) })
+	sort.Slice(r.routes, func(i, j int) bool {
+		a, b := strings.TrimPrefix(r.routes[i].Domain, "*."), strings.TrimPrefix(r.routes[j].Domain, "*.")
+		if len(a) != len(b) {
+			return len(a) > len(b)
+		}
+		return strings.HasPrefix(r.routes[i].Domain, "*.") && !strings.HasPrefix(r.routes[j].Domain, "*.")
+	})
 	return r
 }
 func (r *Router) Match(host string) (string, bool) {
@@ -22,7 +29,8 @@ func (r *Router) Match(host string) (string, bool) {
 		return "", false
 	}
 	for _, v := range r.routes {
-		if config.Within(h, v.Domain) {
+		suffix := strings.TrimPrefix(v.Domain, "*.")
+		if config.Within(h, suffix) && (suffix == v.Domain || h != suffix) {
 			return v.Target, true
 		}
 	}

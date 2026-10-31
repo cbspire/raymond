@@ -85,3 +85,22 @@ func (w *writer) Close() error                { return nil }
 func (w *writer) TsigStatus() error           { return nil }
 func (w *writer) TsigTimersOnly(bool)         {}
 func (w *writer) Hijack()                     {}
+
+func TestWildcardDNS(t *testing.T) {
+	c := config.Config{Version: 1, DNS: config.DNS{Zones: []string{"test"}}, Routes: []config.Route{{Domain: "*.apps.test", Target: "127.0.0.1:9001"}}}
+	if e := c.Validate(); e != nil {
+		t.Fatal(e)
+	}
+	for host, want := range map[string]int{"one.apps.test.": 0, "deep.one.apps.test.": 0, "apps.test.": mdns.RcodeNameError, "evilapps.test.": mdns.RcodeNameError, "one.apps.test.evil.": mdns.RcodeRefused} {
+		q := new(mdns.Msg)
+		q.SetQuestion(host, mdns.TypeA)
+		w := &writer{}
+		New(c).ServeDNS(w, q)
+		if w.msg.Rcode != want {
+			t.Fatalf("%s: %s", host, w.msg)
+		}
+		if want == 0 && len(w.msg.Answer) != 1 {
+			t.Fatal(w.msg)
+		}
+	}
+}

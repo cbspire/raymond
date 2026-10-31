@@ -31,11 +31,11 @@ raymond upgrade --version 0.1.1  # A specific release
 
 **One native executable, no application runtime dependencies.** Raymond includes its DNS server and HTTP proxy. It needs no Go installation, Docker, Python, Node, nginx or dnsmasq to run. Linux binaries are statically linked; macOS uses only system libraries. YAML is configuration data. Installed service/split-DNS integration uses the OS's native management tools and services, described below.
 
-**HTTP only.** HTTPS, certificates and trust-store changes are deferred to v0.2. There is no caching, compression, rewriting, management dashboard or remote-control API. `.local` is rejected because it conflicts with mDNS/Bonjour. Local processes can reach the proxy; loopback is not an authentication boundary.
+**HTTP only.** HTTPS, certificates and trust-store changes are deferred to v0.2. There is no caching, compression or rewriting. This 0.1.2 feature branch adds an authenticated local dashboard and native management broker; its native acceptance checks must pass before release. `.local` is rejected because it conflicts with mDNS/Bonjour. Local processes can reach the proxy; loopback is not an authentication boundary.
 
 ## Build from source
 
-Development needs Git, Make and **Go 1.26.10 or a later compatible patched toolchain**. The compiled binary does not require Go or another language runtime.
+Development needs Git, Make and **Go 1.26.10 or a later compatible patched toolchain**. Frontend changes also need Node 22.12+ (`npm ci --prefix web && npm run build --prefix web`); ordinary Go builds use the checked-in embedded assets. The compiled binary does not require Go or another language runtime.
 
 ```sh
 git clone https://github.com/cbspire/raymond.git
@@ -60,7 +60,7 @@ bin/raymond config path
 
 This creates `~/.raymond/raymond.yaml` with private permissions, a dedicated `raymond.test` zone and an empty route list. Existing settings are validated and preserved. Without sudo, `install` prepares only this user configuration.
 
-After privileged installation and service startup, [http://raymond.test](http://raymond.test) serves a small built-in dashboard landing page even with no app mappings. It is embedded in the executable, works offline and needs no extra web server. An explicit route matching `raymond.test` takes precedence over the dashboard landing page.
+After privileged installation and service startup, [http://raymond.test](http://raymond.test) serves the embedded React management dashboard, including an empty service directory when no mappings exist. It is embedded in the executable, works offline and needs no extra web server. An explicit route matching `raymond.test` takes precedence over the dashboard landing page.
 
 Edit the generated file to add your local app mappings, for example:
 
@@ -116,15 +116,17 @@ This option defaults to false and is macOS-only. Raymond still binds exactly its
 The following explicit commands install a protected copy of your reviewed binary, install Raymond-owned resources, check binds, and start the service. They change OS DNS/service configuration; **review the changes before running them on your workstation**.
 
 ```sh
-sudo ./bin/raymond install
-sudo ./bin/raymond doctor
-sudo ./bin/raymond start
+./bin/raymond setup       # One administrator authorization for enrollment
+./bin/raymond doctor
+./bin/raymond dashboard
 ./bin/raymond status
 ```
 
-`sudo raymond install` finds the invoking user's `~/.raymond/raymond.yaml`, creating it if missing, and validates it before installing a root-owned service copy at `/etc/raymond/config.yaml`. `--config path` remains available for an explicit source file and does not generate a default file. `config path`, `config validate`, `doctor` and `serve` default to the user configuration; the installed daemon reads only the protected system copy.
+`raymond setup` enrolls the invoking ordinary account, validates its private configuration and installs independent native proxy/manager services using one protected executable. The default config is `~/.raymond/raymond.yaml`; use `--config path` for an invoking-user-owned custom file. Enrollment records that single owner, config path and CLI path outside the editable YAML and does not silently transfer them. The CLI executable must live in an owner-writable directory, such as `~/.local/bin`.
 
-`install` and `start` are separate actions. The service uses a root-owned copy of the binary; it does not execute from your checkout or `~/.local/bin`. macOS stores that service binary under `/Library/PrivilegedHelperTools`, outside Homebrew-managed directories. No manual root-owned bootstrap copy is needed. Explicit sudo installation accepts a source owned by root or the invoking user, with non-writable-to-others ancestors and no symlinks. Managed service paths and their ancestors still require root ownership. The default wildcard policy is checked before creating OS resources; actual bind checks still run after the dedicated macOS aliases exist, including with the HTTP coexistence option.
+After enrollment, dashboard Save & Apply and CLI `setup`, `doctor`, `start`, `stop`, `restart`, `status`, `logs` and `upgrade` use the same private operation API without further sudo. Setup and successful CLI upgrades automatically open an authorized dashboard; `raymond dashboard` is an optional shortcut to reopen it. A short-lived private launch file delivers authorization; the token is absent from terminal output and process arguments. The dashboard shares the proxy listener and disappears when Raymond stops; the Unix-socket manager remains available for `raymond start`.
+
+Low-level root-only `install`/`start` remains supported for compatibility, but it does not enroll dashboard management. Run normal-user `setup` once to migrate a 0.1.1 installation. Service binaries never run from your home directory. Only fixed native operations are exposed, and config/credential/CLI file I/O runs after dropping to the recorded owner's UID. See [installation details](docs/installation.md).
 
 Verify through the normal OS resolver:
 
@@ -143,22 +145,22 @@ You should receive your app's HTTP response. `curl --resolve` can diagnose the p
 ./bin/raymond logs --no-follow         # Print recent lines and exit
 ```
 
-Press Ctrl+C to stop following. Each completed HTTP request records its method, hostname, escaped path, response status, response bytes and duration. Query strings, authorization headers, cookies and request/response bodies are excluded. Streaming requests and WebSockets are logged when they finish. macOS follows `/var/log/raymond.log` across file rotation; Linux follows only `raymond.service` in the journal (use sudo if journal permissions require it). Foreground `serve` writes the same request events to stderr.
+Press Ctrl+C to stop following. Each completed HTTP request records its method, hostname, escaped path, response status, response bytes and duration. Query strings, authorization headers, cookies and request/response bodies are excluded. Streaming requests and WebSockets are logged when they finish. macOS follows `/var/log/raymond.log` across file rotation; Linux follows only `raymond.service` in the journal. Enrolled owners receive a redacted stream through the manager without journal-group membership or sudo. Foreground `serve` writes the same request events to stderr.
 
-After rebuilding a binary that adds or changes logging, update the managed service using the uninstall/install/start procedure below; `restart` alone still runs the previously installed binary.
+Software updates use verified native archives from the fixed Raymond release source. `restart` runs the installed version; it does not install an arbitrary local rebuild.
 
 ## Stop, update and uninstall
 
 ```sh
-sudo ./bin/raymond stop
-sudo ./bin/raymond start
-sudo ./bin/raymond restart
+./bin/raymond stop
+./bin/raymond start
+./bin/raymond restart
 sudo ./bin/raymond uninstall
 ```
 
 These are separate lifecycle examples. Uninstall also stops the service if needed. It removes only recorded owned resources and refuses operator-modified installed files. Your `~/.raymond/raymond.yaml`, downloaded binary remain; empty directories/logs may also remain.
 
-For config changes, edit your user YAML and run `raymond setup`. Use `raymond upgrade` for a new release. Manual lifecycle commands remain available; changing protected installed files directly prevents safe cleanup. No hot reload is provided.
+For config changes, use dashboard Save & Apply or edit your user YAML and run `raymond setup`. Stale revisions are rejected, failed activation keeps saved changes pending, and Retry/Discard resolve them. Use `raymond upgrade` for a newer management-compatible stable release (0.1.2 or later); downloaded shell installers are not executed by the manager. Manual lifecycle commands remain available; changing protected installed files directly prevents safe cleanup. No hot reload is provided.
 
 ## Download options
 
@@ -181,7 +183,7 @@ bash scripts/test-installer.sh
 go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 ```
 
-`make check` runs formatting checks, vet, pinned static analysis, unit/race tests and a static build. First-time tooling/dependency installation needs Internet access. Raymond itself only contacts configured local backends at runtime. `make snapshot` needs GoReleaser v2.16.0 and builds all four native archives without publishing.
+`make check` runs formatting checks, vet, pinned static analysis, unit/race tests and a static build. First-time tooling/dependency installation needs Internet access. Normal serving contacts only configured local backends; explicit update checks/upgrades contact the fixed release source. `make snapshot` needs GoReleaser v2.16.0 and builds all four native archives without publishing.
 
 Privileged acceptance tests run separately on disposable macOS/Linux PR runners. For a manual run, prepare GoReleaser snapshot archives in `dist/`, then run `RAYMOND_PRIVILEGED_SMOKE=1 scripts/smoke.sh` only on a reviewed disposable supported runner. The compiled test helpers are CI tools, not part of the distributed product. Release publication is gated on those tests, security checks and configured approval rules.
 
