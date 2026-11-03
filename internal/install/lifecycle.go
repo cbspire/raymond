@@ -144,16 +144,35 @@ func installLocked(path string) error {
 }
 func installSourceLocked(path, exe string) error { return installSourceMode(path, exe, false) }
 
+// Native service addresses stay fixed so alias ownership and cleanup remain bounded.
+// macOS split DNS can select a port; systemd-resolved requires DNS port 53.
+func validateServiceListeners(c config.Config, platform string) error {
+	if platform != "linux" && platform != "darwin" {
+		return fmt.Errorf("unsupported platform")
+	}
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	host, _, err := net.SplitHostPort(c.DNS.Listen)
+	if err != nil {
+		return err
+	}
+	if host != "127.0.0.43" || c.Proxy.Listen != "127.0.0.42:80" {
+		return fmt.Errorf("OS installation requires DNS at 127.0.0.43 and HTTP at 127.0.0.42:80; use serve for custom addresses or HTTP ports")
+	}
+	if platform == "linux" && c.DNS.Listen != "127.0.0.43:53" {
+		return fmt.Errorf("linux OS installation requires DNS port 53; use serve for custom test ports")
+	}
+	return nil
+}
+
 func installSourceMode(path, exe string, replaceBinary bool) error {
 	c, e := config.Load(path)
 	if e != nil {
 		return e
 	}
-	if c.DNS.Listen != "127.0.0.43:53" || c.Proxy.Listen != "127.0.0.42:80" {
-		return fmt.Errorf("OS installation requires default addresses and ports; use serve for custom test ports")
-	}
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		return fmt.Errorf("unsupported platform")
+	if e = validateServiceListeners(c, runtime.GOOS); e != nil {
+		return e
 	}
 	files := darwin.Files(c)
 	if runtime.GOOS == "linux" {

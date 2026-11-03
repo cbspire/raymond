@@ -155,3 +155,11 @@ After a release exists, `scripts/install.sh` supports:
 The script requires Bash (including macOS Bash 3.2), tar, gzip, awk and standard file tools, plus `shasum` on macOS or `sha256sum` on Linux. Online downloads additionally require curl. It accepts no positional arguments. Downloads and redirects use HTTPS. Checksums, exact archive names and regular-file entries are checked before executing the staged binary's `version` command. Failed downloads/checksums/validation leave an existing binary unchanged. A directory or symlink at the destination is refused. Staging files are removed on failure and handled signals.
 
 The SHA-256 manifest comes from the same GitHub release as the archive; this provides integrity but not independent provenance. Review signing/attestation before broader distribution. Default setup requests administrator access for service/DNS changes. Set `RAYMOND_BINARY_ONLY=1` to skip those steps and shell-profile edits.
+
+## macOS CoreDNS coexistence
+
+A foreground `raymond serve` starts DNS and HTTP only. The management dashboard requires enrollment through normal-user `raymond setup` and an authorized launch through `raymond dashboard`.
+
+When another DNS server owns port 53, macOS setup supports DNS on `127.0.0.43:1053` while keeping HTTP on `127.0.0.42:80`. Set `main_domain: raymond.internal`, `dns.zones: [internal]` and `dns.listen: 127.0.0.43:1053` in `~/.raymond/raymond.yaml`. The owned `/etc/resolver/internal` selects port 1053. Linux native setup still requires DNS port 53.
+
+Review setup's privileged changes before running it. Stop any foreground Raymond process first so setup can check the listeners. If a manual `/etc/resolver/internal` already exists, explicitly back it up and remove that exact reviewed file before setup; Raymond refuses unowned resources, even with matching contents. Do not remove an existing `.test` resolver or change another DNS server. Existing loopback aliases are preserved and are not claimed for uninstall. Native setup installs protected proxy and manager executables/configuration, launchd services and management credentials. Uninstall removes only journaled owned resources.

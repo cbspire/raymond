@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"github.com/cbspire/raymond/internal/config"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -202,5 +203,56 @@ func TestHeaderSessionMigrationRevokesLegacyCookies(t *testing.T) {
 	}
 	if _, ok := persisted.Session(capability); !ok {
 		t.Fatal("header capability was lost on restart")
+	}
+}
+
+type configuredBackend struct {
+	stubBackend
+	config config.Config
+}
+
+func (b *configuredBackend) State(context.Context) (State, error) {
+	return State{Active: ConfigView{Config: b.config}}, nil
+}
+func TestConfiguredDashboardBrowserBoundary(t *testing.T) {
+	c, err := config.Decode(strings.NewReader("version: 1\nmain_domain: raymond.internal\ndns:\n  zones: [internal]\nproxy:\n  listen: 127.0.0.42:8080\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewAuth(filepath.Join(t.TempDir(), "auth.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	launch, _ := a.Launch()
+	session, csrf, err := a.Exchange(launch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := &configuredBackend{config: c}
+	h := Handler(b, a, "owner", "proxy")
+	for _, tc := range []struct {
+		host, origin string
+		want         int
+	}{
+		{"raymond.internal:8080", "http://raymond.internal:8080", 202},
+		{"raymond.test", Origin, 403},
+		{"raymond.internal", "http://raymond.internal", 403},
+		{"raymond.internal:8080", Origin, 403},
+		{"child.raymond.internal:8080", "http://child.raymond.internal:8080", 403},
+	} {
+		req := httptest.NewRequest("POST", "http://"+tc.host+Prefix+"operations", strings.NewReader(`{"action":"restart"}`))
+		req.Header.Set("Authorization", "Bearer proxy")
+		req.Header.Set("Origin", tc.origin)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(SessionHeader, session)
+		req.Header.Set("X-Raymond-CSRF", csrf)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != tc.want {
+			t.Fatalf("host=%s origin=%s: %d %s", tc.host, tc.origin, w.Code, w.Body.String())
+		}
+	}
+	if b.calls != 1 {
+		t.Fatalf("unexpected operations: %d", b.calls)
 	}
 }

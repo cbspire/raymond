@@ -164,3 +164,21 @@ func TestWildcardRouteValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestMainDomainValidation(t *testing.T) {
+	for _, host := range []string{"raymond.internal", "RAYMOND.INTERNAL."} {
+		c, err := Decode(strings.NewReader("version: 1\nmain_domain: " + host + "\ndns:\n  zones: [internal]\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := yaml.Marshal(c)
+		if err != nil || !strings.Contains(string(encoded), "main_domain: raymond.internal") {
+			t.Fatalf("not normalized: %s, %v", encoded, err)
+		}
+	}
+	for _, host := range []string{".internal", "*.internal", "http://raymond.internal", "raymond.test", "raymond.internal:8080", "raymond.local"} {
+		if _, err := Decode(strings.NewReader("version: 1\nmain_domain: '" + host + "'\ndns:\n  zones: [internal]\n")); err == nil {
+			t.Fatalf("accepted main domain %q", host)
+		}
+	}
+}

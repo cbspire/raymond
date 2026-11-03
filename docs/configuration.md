@@ -6,7 +6,24 @@ See `examples/raymond.yaml`. The `routes` list maps each base domain and its sub
 
 `raymond config path` prints this user path. `config validate`, `doctor` and `serve` use it by default. Explicit `--file`/`--config` overrides still work. `install --config path` uses that existing file without creating a default configuration.
 
-When a configured DNS zone contains `raymond.test`, its A record resolves to the proxy even without a route mapping. The exact hostname serves an embedded HTML dashboard landing page at `/`, with GET and HEAD support. Unknown subdomains still return NXDOMAIN/404, and an explicit matching route overrides the built-in page. Zones unrelated to `raymond.test` do not resolve it. The dashboard assets have no external dependencies or tracking. This feature branch includes authenticated local management forwarding; enrollment and the root manager now connect dashboard controls to native operations, pending supported-runner acceptance before release.
+`main_domain` sets the full dashboard hostname. For an `.internal`-only namespace, use:
+
+```yaml
+version: 1
+main_domain: raymond.internal
+dns:
+  zones: [internal]
+  listen: 127.0.0.43:53
+proxy:
+  listen: 127.0.0.42:80
+routes: []
+```
+
+Use `internal` for a DNS zone and `raymond.internal` for the dashboard hostname; do not include a leading dot, scheme or port. An explicit main domain must belong to a configured zone. Omitting it preserves the legacy `raymond.test` hostname, which only resolves when covered by a configured zone. DNS and HTTP serve only the exact dashboard hostname; unknown subdomains return NXDOMAIN/404. Application routes retain precedence. The same configured hostname controls browser Host/Origin checks and `raymond dashboard` launches. After changing it, run `raymond dashboard` again to open an authorized session at the new hostname.
+
+Foreground testing can use alternate ports, for example DNS `127.0.0.43:1053` and HTTP `127.0.0.42:8080`. On macOS a reviewed `/etc/resolver/internal` file can select `nameserver 127.0.0.43` and `port 1053`; the loopback aliases must already exist. Browse `http://raymond.internal:8080`. This requires no changes to an existing `.test` resolver or CoreDNS. Native service installation keeps DNS at `127.0.0.43` and HTTP at `127.0.0.42:80`. macOS setup also supports a custom DNS port and writes it into the owned split-DNS resolver; Linux setup requires port 53. Foreground serving alone does not enroll the management broker; dashboard controls remain unavailable until enrollment. Use normal-user `raymond setup` for the full dashboard, then `raymond dashboard` to open an authorized session. A pre-existing manual `/etc/resolver/internal` is unowned: explicitly back it up and remove only that reviewed file before setup. Raymond refuses to adopt or overwrite it.
+
+The embedded dashboard assets work offline. The authenticated management API remains local and requires enrollment, session/CSRF checks and the configured Host/Origin.
 
 Zones and domains are lowercase ASCII DNS names after normalization; one final dot is ignored. Unicode is rejected: convert IDNA names to explicit punycode before configuration. `.local` zones are disabled. Hosts match a route's base domain or any descendant, with longest suffix winning at label boundaries. Explicit wildcard routes such as `"*.apps.test"` match any subdomain (including nested subdomains), while leaving the `apps.test` apex separate. Wildcards are allowed only as the initial `*.`. Quote them in YAML to avoid YAML alias syntax. A more specific base domain wins over a broader wildcard; when `apps.test` and `*.apps.test` are both configured, the former handles the apex and the latter handles descendants. All route domains must belong to a configured zone. Targets are IPv4 loopback literals with numeric ports. External targets and IPv6 are deliberately unsupported in v0.1.
 

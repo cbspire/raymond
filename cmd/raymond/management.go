@@ -89,12 +89,12 @@ func openDashboard(client *control.Client, opener func(context.Context, string) 
 	if e = client.Call(ctx, "GET", control.Prefix+"state", nil, &state); e != nil {
 		return e
 	}
-	if _, matched := router.New(state.Active.Config.Routes).Match(router.DashboardHost); matched {
-		return fmt.Errorf("a configured application route shadows raymond.test; the dashboard cannot override it")
+	if _, matched := router.New(state.Active.Config.Routes).Match(state.Active.Config.DashboardHost()); matched {
+		return fmt.Errorf("a configured application route shadows %s; the dashboard cannot override it", state.Active.Config.DashboardHost())
 	}
 	covered := false
 	for _, zone := range state.Active.Config.DNS.Zones {
-		covered = covered || config.Within(router.DashboardHost, zone)
+		covered = covered || config.Within(state.Active.Config.DashboardHost(), zone)
 	}
 	if !covered {
 		return fmt.Errorf("dashboard hostname is outside the active DNS zones")
@@ -116,7 +116,7 @@ func openDashboard(client *control.Client, opener func(context.Context, string) 
 	}
 	// Open a private local redirect file so the single-use token is not exposed in
 	// a process argument, terminal output, HTTP query string or access log.
-	target := control.Origin + "/#token=" + url.QueryEscape(launch.Token)
+	target := state.Active.Config.DashboardOrigin() + "/#token=" + url.QueryEscape(launch.Token)
 	html := []byte(`<!doctype html><meta http-equiv="refresh" content="0;url=` + target + `"><title>Opening Raymond</title>`)
 	request, _ := json.Marshal(manager.OwnerRequest{Action: "launch", Data: html})
 	if e = manager.OwnerHelper(bytes.NewReader(request), io.Discard); e != nil {

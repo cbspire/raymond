@@ -1,10 +1,12 @@
 package manager
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cbspire/raymond/internal/config"
 	"net"
 	"net/http"
 	"os"
@@ -313,12 +315,20 @@ func replace(ctx context.Context, b *Backend, j *control.Operations, op control.
 	}()})
 }
 func health(ctx context.Context) error {
+	data, err := install.ReadManagedConfig()
+	if err != nil {
+		return err
+	}
+	c, err := config.Decode(bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
 	client := &http.Client{Transport: &http.Transport{Proxy: nil}, Timeout: time.Second}
 	defer client.CloseIdleConnections()
 	deadline := time.Now().Add(15 * time.Second)
 	for {
 		var last error
-		for _, address := range []string{"127.0.0.42:80", "127.0.0.43:53"} {
+		for _, address := range []string{c.Proxy.Listen, c.DNS.Listen} {
 			c, e := (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "tcp4", address)
 			if e != nil {
 				last = e
@@ -327,8 +337,8 @@ func health(ctx context.Context) error {
 			c.Close()
 		}
 		if last == nil {
-			request, _ := http.NewRequestWithContext(ctx, http.MethodHead, "http://127.0.0.42/", nil)
-			request.Host = "raymond.test"
+			request, _ := http.NewRequestWithContext(ctx, http.MethodHead, "http://"+c.Proxy.Listen+"/", nil)
+			request.Host = strings.TrimPrefix(c.DashboardOrigin(), "http://")
 			response, e := client.Do(request)
 			if e != nil {
 				last = e
@@ -339,7 +349,7 @@ func health(ctx context.Context) error {
 		if last == nil {
 			q := new(mdns.Msg)
 			q.SetQuestion("raymond-health.invalid.", mdns.TypeA)
-			response, _, e := (&mdns.Client{Timeout: time.Second}).ExchangeContext(ctx, q, "127.0.0.43:53")
+			response, _, e := (&mdns.Client{Timeout: time.Second}).ExchangeContext(ctx, q, c.DNS.Listen)
 			if e == nil && response != nil {
 				return nil
 			}

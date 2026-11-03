@@ -3,6 +3,7 @@ export interface Route {
   target: string;
 }
 export interface Config {
+  main_domain?: string;
   version: number;
   dns: { zones: string[]; listen: string };
   proxy: { listen: string; allow_wildcard_coexistence?: boolean };

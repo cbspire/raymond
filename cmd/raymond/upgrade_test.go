@@ -31,11 +31,12 @@ func TestNativeUpgradeVersionArguments(t *testing.T) {
 }
 
 type upgradeBackend struct {
-	mu        sync.Mutex
-	status    string
-	shadow    bool
-	completed bool
-	requests  []control.Request
+	mu         sync.Mutex
+	status     string
+	shadow     bool
+	mainDomain string
+	completed  bool
+	requests   []control.Request
 }
 
 func (b *upgradeBackend) State(context.Context) (control.State, error) {
@@ -45,6 +46,11 @@ func (b *upgradeBackend) State(context.Context) (control.State, error) {
 		return control.State{}, fmt.Errorf("dashboard requested before upgrade completion")
 	}
 	c := config.Config{DNS: config.DNS{Zones: []string{"test"}}}
+	if b.mainDomain != "" {
+		c.MainDomain = b.mainDomain
+		c.DNS.Zones = []string{"internal"}
+		c.Proxy.Listen = "127.0.0.42:8080"
+	}
 	if b.shadow {
 		c.Routes = []config.Route{{Domain: "raymond.test", Target: "127.0.0.1:3000"}}
 	}
@@ -70,9 +76,11 @@ func TestUpgradeAutomaticallyAuthorizesDashboard(t *testing.T) {
 	}
 	for _, test := range []struct {
 		name, status                string
+		mainDomain                  string
 		browserError, shadow, opens bool
 	}{
 		{name: "successful update", status: "succeeded", opens: true},
+		{name: "internal dashboard", status: "succeeded", opens: true, mainDomain: "raymond.internal"},
 		{name: "failed update", status: "failed"},
 		{name: "browser unavailable", status: "succeeded", browserError: true, opens: true},
 		{name: "application shadows dashboard", status: "succeeded", shadow: true},
@@ -97,7 +105,7 @@ func TestUpgradeAutomaticallyAuthorizesDashboard(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			backend := &upgradeBackend{status: test.status, shadow: test.shadow}
+			backend := &upgradeBackend{status: test.status, shadow: test.shadow, mainDomain: test.mainDomain}
 			handler := control.Handler(backend, auth, "owner-secret", "proxy-secret")
 			server := control.UnixServer(handler, "owner-secret", os.Geteuid())
 			go func() { _ = server.Serve(listener) }()
@@ -138,8 +146,16 @@ func TestUpgradeAutomaticallyAuthorizesDashboard(t *testing.T) {
 					t.Fatal(e)
 				}
 				request.Host = "raymond.test"
+				origin := control.Origin
+				if test.mainDomain != "" {
+					request.Host = test.mainDomain + ":8080"
+					origin = "http://" + request.Host
+				}
+				if !strings.Contains(string(data), "url="+origin+"/#token=") {
+					t.Fatal("incorrect dashboard launch hostname")
+				}
 				request.Header.Set("Authorization", "Bearer proxy-secret")
-				request.Header.Set("Origin", control.Origin)
+				request.Header.Set("Origin", origin)
 				request.Header.Set("Content-Type", "application/json")
 				response, e := proxy.HTTP.Do(request)
 				if e != nil {

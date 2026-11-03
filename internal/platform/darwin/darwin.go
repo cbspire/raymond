@@ -4,6 +4,7 @@ package darwin
 import (
 	"fmt"
 	"github.com/cbspire/raymond/internal/config"
+	"net"
 )
 
 const BinaryPath = "/Library/PrivilegedHelperTools/dev.raymond"
@@ -22,8 +23,13 @@ func Files(c config.Config) map[string][]byte {
 <key>StandardErrorPath</key><string>` + LogPath + `</string>
 </dict></plist>
 `)}
+	address := c.DNS.Listen
+	if address == "" {
+		address = "127.0.0.43:53"
+	}
+	host, port, _ := net.SplitHostPort(address)
 	for _, z := range c.DNS.Zones {
-		files["/etc/resolver/"+z] = []byte(fmt.Sprintf("%snameserver 127.0.0.43\nport 53\n", Marker))
+		files["/etc/resolver/"+z] = []byte(fmt.Sprintf("%snameserver %s\nport %s\n", Marker, host, port))
 	}
 	return files
 }

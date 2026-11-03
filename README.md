@@ -60,12 +60,13 @@ bin/raymond config path
 
 This creates `~/.raymond/raymond.yaml` with private permissions, a dedicated `raymond.test` zone and an empty route list. Existing settings are validated and preserved. Without sudo, `install` prepares only this user configuration.
 
-After privileged installation and service startup, [http://raymond.test](http://raymond.test) serves the embedded React management dashboard, including an empty service directory when no mappings exist. It is embedded in the executable, works offline and needs no extra web server. An explicit route matching `raymond.test` takes precedence over the dashboard landing page.
+After privileged installation and service startup, [http://raymond.test](http://raymond.test) serves the embedded React management dashboard, including an empty service directory when no mappings exist. It is embedded in the executable, works offline and needs no extra web server. Set `main_domain: raymond.internal` with `dns.zones: [internal]` to use only `.internal` names. The main domain is a full hostname, without a leading dot; see the [configuration reference](docs/configuration.md). An explicit route matching the dashboard hostname takes precedence over the dashboard landing page.
 
 Edit the generated file to add your local app mappings, for example:
 
 ```yaml
 version: 1
+main_domain: raymond.test
 dns:
   zones: [raymond.test]
   listen: 127.0.0.43:53
@@ -101,7 +102,7 @@ Review the platform requirements before running administrator commands:
 | [macOS](docs/macos.md) | launchd, dedicated `lo0` aliases and owned `/etc/resolver/<zone>` files. The daemon runs as root in v0.1. |
 | [Linux](docs/linux.md) | Both systemd-resolved and systemd-networkd already active; `/etc/resolv.conf` resolves to `/run/systemd/resolve/stub-resolv.conf`. The service uses DynamicUser and CAP_NET_BIND_SERVICE. |
 
-NetworkManager-only, non-systemd and container setups are unsupported for automatic Linux integration. Raymond refuses conflicts and does not rewrite `resolv.conf` or overwrite unrelated resolver files. An existing `0.0.0.0:80` listener is refused by default; macOS users can explicitly enable the coexistence option below when their exact loopback bind is available. OS integration requires the default addresses and ports shown above.
+NetworkManager-only, non-systemd and container setups are unsupported for automatic Linux integration. Raymond refuses conflicts and does not rewrite `resolv.conf` or overwrite unrelated resolver files. An existing `0.0.0.0:80` listener is refused by default; macOS users can explicitly enable the coexistence option below when their exact loopback bind is available. OS integration requires the dedicated addresses and HTTP port shown above. macOS setup can use a custom DNS port, such as `127.0.0.43:1053`, to coexist with another DNS server; Linux setup requires port 53.
 
 On macOS, Docker Desktop can hold a wildcard socket even for a localhost-only published port. To permit separate-address HTTP coexistence without changing Docker, explicitly add this to your user configuration:
 

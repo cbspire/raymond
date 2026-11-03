@@ -1,4 +1,5 @@
 version: 1
+main_domain: raymond.test
 dns:
   zones: [test, internal]
   listen: 127.0.0.43:53

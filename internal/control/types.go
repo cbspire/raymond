@@ -14,7 +14,9 @@ import (
 const RootDir = "/var/lib/raymond/management"
 const SocketPath = SocketDir + "/control.sock"
 const Prefix = "/api/v1/"
-const Origin = "http://raymond.test"
+
+// Origin is the legacy default; browser validation uses the active config.
+const Origin = "http://" + config.DefaultMainDomain
 const SessionHeader = "X-Raymond-Session"
 
 type Metadata struct {
