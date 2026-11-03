@@ -182,3 +182,23 @@ func TestAppRouteDoesNotReceiveDashboardCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestConfiguredMainDomain(t *testing.T) {
+	c := config.Config{MainDomain: "raymond.internal"}
+	h := newWithControl(router.NewConfigured(c), nil)
+	for host, want := range map[string]int{"raymond.internal:8080": 200, "RAYMOND.INTERNAL.:8080": 200, "raymond.test": 404, "child.raymond.internal": 404, "evilraymond.internal": 404} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "http://"+host+"/", nil))
+		if w.Code != want {
+			t.Fatalf("%s: %d", host, w.Code)
+		}
+	}
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(201) }))
+	defer backend.Close()
+	c.Routes = []config.Route{{Domain: "raymond.internal", Target: strings.TrimPrefix(backend.URL, "http://")}}
+	w := httptest.NewRecorder()
+	newWithControl(router.NewConfigured(c), nil).ServeHTTP(w, httptest.NewRequest("GET", "http://raymond.internal/", nil))
+	if w.Code != 201 {
+		t.Fatalf("route did not take precedence: %d", w.Code)
+	}
+}

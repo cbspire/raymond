@@ -7,13 +7,13 @@ import (
 	"strings"
 )
 
-type Router struct{ routes []config.Route }
-
-// DashboardHost is the built-in dashboard landing page hostname, used only without a matching route.
-const DashboardHost = "raymond.test"
+type Router struct {
+	routes        []config.Route
+	dashboardHost string
+}
 
 func New(routes []config.Route) *Router {
-	r := &Router{routes: append([]config.Route(nil), routes...)}
+	r := &Router{routes: append([]config.Route(nil), routes...), dashboardHost: config.DefaultMainDomain}
 	sort.Slice(r.routes, func(i, j int) bool {
 		a, b := strings.TrimPrefix(r.routes[i].Domain, "*."), strings.TrimPrefix(r.routes[j].Domain, "*.")
 		if len(a) != len(b) {
@@ -36,3 +36,11 @@ func (r *Router) Match(host string) (string, bool) {
 	}
 	return "", false
 }
+
+// NewConfigured snapshots the routes and dashboard hostname from validated config.
+func NewConfigured(c config.Config) *Router {
+	r := New(c.Routes)
+	r.dashboardHost = c.DashboardHost()
+	return r
+}
+func (r *Router) DashboardHost() string { return r.dashboardHost }

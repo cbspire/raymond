@@ -55,7 +55,7 @@ func newWithControl(routes *router.Router, client *control.Client) http.Handler 
 		}
 		target, ok := routes.Match(host)
 		if !ok {
-			if name, e := config.Normalize(host); e == nil && name == router.DashboardHost {
+			if name, e := config.Normalize(host); e == nil && name == routes.DashboardHost() {
 				serveManagement(w, r, client)
 				return
 			}

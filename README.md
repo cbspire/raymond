@@ -60,12 +60,13 @@ bin/raymond config path
 
 This creates `~/.raymond/raymond.yaml` with private permissions, a dedicated `raymond.test` zone and an empty route list. Existing settings are validated and preserved. Without sudo, `install` prepares only this user configuration.
 
-After privileged installation and service startup, [http://raymond.test](http://raymond.test) serves the embedded React management dashboard, including an empty service directory when no mappings exist. It is embedded in the executable, works offline and needs no extra web server. An explicit route matching `raymond.test` takes precedence over the dashboard landing page.
+After privileged installation and service startup, [http://raymond.test](http://raymond.test) serves the embedded React management dashboard, including an empty service directory when no mappings exist. It is embedded in the executable, works offline and needs no extra web server. Set `main_domain: raymond.internal` with `dns.zones: [internal]` to use only `.internal` names. The main domain is a full hostname, without a leading dot; see the [configuration reference](docs/configuration.md). An explicit route matching the dashboard hostname takes precedence over the dashboard landing page.
 
 Edit the generated file to add your local app mappings, for example:
 
 ```yaml
 version: 1
+main_domain: raymond.test
 dns:
   zones: [raymond.test]
   listen: 127.0.0.43:53

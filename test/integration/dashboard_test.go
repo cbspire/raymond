@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -14,11 +15,31 @@ import (
 )
 
 func TestGeneratedConfigServesDashboard(t *testing.T) {
+	testDashboard(t, "raymond.test", "raymond.test")
+}
+
+func TestConfiguredInternalDashboard(t *testing.T) {
+	testDashboard(t, "raymond.internal", "internal")
+}
+
+func testDashboard(t *testing.T, host, zone string) {
+	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("SUDO_UID", "")
 	p, _, e := config.InitUser()
 	if e != nil {
 		t.Fatal(e)
+	}
+	if host != "raymond.test" {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		document := strings.Replace(string(data), "zones: [raymond.test]", "zones: ["+zone+"]", 1)
+		document += "\nmain_domain: " + host + "\n"
+		if err := os.WriteFile(p, []byte(document), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	c, e := config.Load(p)
 	if e != nil {
@@ -40,7 +61,7 @@ func TestGeneratedConfigServesDashboard(t *testing.T) {
 		}
 	}()
 	q := new(mdns.Msg)
-	q.SetQuestion("raymond.test.", mdns.TypeA)
+	q.SetQuestion(host+".", mdns.TypeA)
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		r, _, e := (&mdns.Client{Timeout: 100 * time.Millisecond}).Exchange(q, c.DNS.Listen)
@@ -58,7 +79,7 @@ func TestGeneratedConfigServesDashboard(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	r.Host = "raymond.test"
+	r.Host = host
 	response, e := client.Do(r)
 	if e != nil {
 		t.Fatal(e)
@@ -74,7 +95,7 @@ func TestGeneratedConfigServesDashboard(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		request.Host = "raymond.test"
+		request.Host = host
 		response, e := client.Do(request)
 		if e != nil {
 			t.Fatal(e)

@@ -27,11 +27,33 @@ type Route struct {
 	Domain string `yaml:"domain" json:"domain"`
 	Target string `yaml:"target" json:"target"`
 }
+
+const DefaultMainDomain = "raymond.test"
+
 type Config struct {
-	Version int     `yaml:"version" json:"version"`
-	DNS     DNS     `yaml:"dns" json:"dns"`
-	Proxy   Proxy   `yaml:"proxy" json:"proxy"`
-	Routes  []Route `yaml:"routes" json:"routes"`
+	MainDomain string  `yaml:"main_domain,omitempty" json:"main_domain,omitempty"`
+	Version    int     `yaml:"version" json:"version"`
+	DNS        DNS     `yaml:"dns" json:"dns"`
+	Proxy      Proxy   `yaml:"proxy" json:"proxy"`
+	Routes     []Route `yaml:"routes" json:"routes"`
+}
+
+// DashboardHost returns the configured full hostname, preserving legacy defaults.
+func (c Config) DashboardHost() string {
+	if c.MainDomain == "" {
+		return DefaultMainDomain
+	}
+	return c.MainDomain
+}
+
+// DashboardOrigin includes a non-default HTTP port for browser security checks.
+func (c Config) DashboardOrigin() string {
+	_, port, _ := net.SplitHostPort(c.Proxy.Listen)
+	host := c.DashboardHost()
+	if port != "" && port != "80" {
+		host = net.JoinHostPort(host, port)
+	}
+	return "http://" + host
 }
 
 // Normalize uses ASCII DNS labels; Unicode must be supplied as explicit punycode.
@@ -163,6 +185,20 @@ func (c *Config) Validate() error {
 		}
 		seen[z] = true
 		c.DNS.Zones[i] = z
+	}
+	if c.MainDomain != "" {
+		domain, err := Normalize(c.MainDomain)
+		if err != nil {
+			return fmt.Errorf("main_domain: %w", err)
+		}
+		covered := false
+		for _, zone := range c.DNS.Zones {
+			covered = covered || Within(domain, zone)
+		}
+		if !covered {
+			return fmt.Errorf("main_domain must be within a configured DNS zone")
+		}
+		c.MainDomain = domain
 	}
 	seen = map[string]bool{}
 	for i, r := range c.Routes {

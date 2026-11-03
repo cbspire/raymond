@@ -14,6 +14,8 @@ import (
 
 const defaultUserConfig = `# Raymond user configuration. Edit routes to point to your local apps.
 version: 1
+# Dashboard hostname; must belong to one of the DNS zones below.
+# main_domain: raymond.test
 dns:
   zones: [raymond.test]
   listen: 127.0.0.43:53

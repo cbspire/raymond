@@ -52,11 +52,19 @@ func Handler(b Backend, a *Auth, owner, proxy string) http.Handler {
 			return
 		}
 		if !isOwner {
-			if r.Host != "raymond.test" && r.Host != "raymond.test:80" {
+			state, err := b.State(r.Context())
+			if err != nil || state.Active.Error != "" {
+				Failure(w, &Error{503, "active dashboard configuration unavailable"})
+				return
+			}
+			origin := state.Active.Config.DashboardOrigin()
+			authority := strings.TrimPrefix(origin, "http://")
+			validHost := r.Host == authority || (authority == state.Active.Config.DashboardHost() && r.Host == authority+":80")
+			if !validHost {
 				Failure(w, &Error{403, "invalid dashboard host"})
 				return
 			}
-			if origin := r.Header.Get("Origin"); origin != "" && origin != Origin {
+			if supplied := r.Header.Get("Origin"); supplied != "" && supplied != origin {
 				Failure(w, &Error{403, "cross-origin request rejected"})
 				return
 			}
@@ -64,7 +72,7 @@ func Handler(b Backend, a *Auth, owner, proxy string) http.Handler {
 				Failure(w, &Error{403, "cross-site request rejected"})
 				return
 			}
-			if r.Method != "GET" && r.Method != "HEAD" && r.Header.Get("Origin") != Origin {
+			if r.Method != "GET" && r.Method != "HEAD" && r.Header.Get("Origin") != origin {
 				Failure(w, &Error{403, "dashboard origin required"})
 				return
 			}

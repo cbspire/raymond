@@ -19,7 +19,7 @@ func New(c config.Config) *Handler {
 	ip, _, _ := net.SplitHostPort(c.Proxy.Listen)
 	zones := append([]string(nil), c.DNS.Zones...)
 	sort.Slice(zones, func(i, j int) bool { return len(zones[i]) > len(zones[j]) })
-	return &Handler{zones: zones, routes: router.New(c.Routes), ip: net.ParseIP(ip).To4()}
+	return &Handler{zones: zones, routes: router.NewConfigured(c), ip: net.ParseIP(ip).To4()}
 }
 func (h *Handler) ServeDNS(w mdns.ResponseWriter, q *mdns.Msg) {
 	m := new(mdns.Msg)
@@ -53,7 +53,7 @@ func (h *Handler) ServeDNS(w mdns.ResponseWriter, q *mdns.Msg) {
 	}
 	m.Authoritative = true
 	_, matched := h.routes.Match(name)
-	if !matched && name != router.DashboardHost {
+	if !matched && name != h.routes.DashboardHost() {
 		m.Rcode = mdns.RcodeNameError
 	} else if question.Qtype == mdns.TypeA {
 		m.Answer = []mdns.RR{&mdns.A{Hdr: mdns.RR_Header{Name: question.Name, Rrtype: mdns.TypeA, Class: mdns.ClassINET, Ttl: 30}, A: h.ip}}

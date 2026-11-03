@@ -4,6 +4,7 @@ import (
 	"github.com/cbspire/raymond/internal/config"
 	mdns "github.com/miekg/dns"
 	"net"
+	"strings"
 	"testing"
 )
 
@@ -101,6 +102,22 @@ func TestWildcardDNS(t *testing.T) {
 		}
 		if want == 0 && len(w.msg.Answer) != 1 {
 			t.Fatal(w.msg)
+		}
+	}
+}
+
+func TestConfiguredDashboardDNS(t *testing.T) {
+	c, err := config.Decode(strings.NewReader("version: 1\nmain_domain: raymond.internal\ndns:\n  zones: [internal, test]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for host, want := range map[string]int{"raymond.internal.": 0, "RAYMOND.INTERNAL.": 0, "raymond.test.": mdns.RcodeNameError, "child.raymond.internal.": mdns.RcodeNameError} {
+		q := new(mdns.Msg)
+		q.SetQuestion(host, mdns.TypeA)
+		w := &writer{}
+		New(c).ServeDNS(w, q)
+		if w.msg.Rcode != want || (want == 0 && len(w.msg.Answer) != 1) {
+			t.Fatalf("%s: %s", host, w.msg)
 		}
 	}
 }
